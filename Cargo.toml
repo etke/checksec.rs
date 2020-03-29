@@ -1,0 +1,42 @@
+[package]
+name = "checksec"
+version = "0.0.1"
+authors = ["etke"]
+edition = "2018"
+license = "Apache-2.0"
+description = "Fast multi-platform (ELF/PE/MachO) binary checksec command line utility and library."
+homepage = "https://github.com/etke/checksec.rs"
+repository = "https://github.com/etke/checksec.rs"
+documentation = "https://github.com/etke/checksec.rs"
+keywords = ["checksec", "binary", "security"]
+categories = ["command-line-utilities"]
+include = [
+    "src/*.rs",
+    "Cargo.toml"
+]
+
+[dependencies]
+colored = "1.9.3"
+goblin = "0.2.1"
+ignore = "0.4.13"
+memmap = "0.7.0"
+scroll = "0.10.1"
+scroll_derive = "0.10.1"
+serde = { version = "1.0.105", features = ["derive"] }
+serde_derive = "1.0.105"
+serde_json = "1.0.50"
+
+[lib]
+name = "checksec"
+path = "src/lib.rs"
+
+[[bin]]
+name = "checksec"
+path = "src/main.rs"
+
+[features]
+default = ["elf", "macho", "pe", "shared"]
+elf = ["shared"]
+macho = ["shared"]
+pe = []
+shared = []
