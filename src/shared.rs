@@ -1,7 +1,9 @@
+//! Implements shared functionalities between elf/macho modules
 use colored::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// Split contents of DT_RPATH/DT_RUNPATH or @rpath entries
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Rpath {
     None,
@@ -33,7 +35,7 @@ impl fmt::Display for VecRpath {
     }
 }
 
-/// dirty hack to print colorized boolean result
+/// dirty hack to return colorized boolean result as a String
 pub fn colorize_bool(tf: bool) -> String {
     if tf {
         format!("{}", tf).bright_green().to_string()

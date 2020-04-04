@@ -1,3 +1,4 @@
+//! Implements checksec for PE32/32+ binaries
 use colored::*;
 use goblin::pe::utils::get_data;
 use goblin::pe::PE;
@@ -8,6 +9,7 @@ use std::fmt;
 
 use crate::shared::colorize_bool;
 
+const IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA: u16 = 0x0020;
 const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY: u16 = 0x0080;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
@@ -20,18 +22,20 @@ const IMAGE_GUARD_RF_INSTRUMENTED: u32 = 0x0002_0000;
 const IMAGE_GUARD_RF_ENABLE: u32 = 0x0004_0000;
 const IMAGE_GUARD_RF_STRICT: u32 = 0x0008_0000;
 
+/// IMAGE_LOAD_CONFIG_CODE_INTEGRITY
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pread)]
-pub struct ImageLoadConfigCodeIntegrity {
+struct ImageLoadConfigCodeIntegrity {
     flags: u16,
     catalog: u16,
     catalogoffset: u32,
     reserved: u32,
 }
-// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory32
+/// IMAGE_LOAD_CONFIG_DIRECTORY32
+/// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory32
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pread)]
-pub struct ImageLoadConfigDirectory32 {
+struct ImageLoadConfigDirectory32 {
     size: u32,
     time_date_stamp: u32,
     major_version: u16,
@@ -76,10 +80,11 @@ pub struct ImageLoadConfigDirectory32 {
     volatiile_metadata_pointer: u32,
 }
 
-// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory64
+/// IMAGE_LOAD_CONFIG_DIRECTORY64
+/// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory64
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pread)]
-pub struct ImageLoadConfigDirectory64 {
+struct ImageLoadConfigDirectory64 {
     size: u32,
     time_date_stamp: u32,
     major_version: u16,
@@ -124,7 +129,7 @@ pub struct ImageLoadConfigDirectory64 {
     volatiile_metadata_pointer: u64,
 }
 
-// Unified 32/64-bit IMAGE_LOAD_CONFIG_DIRECTORY fields
+/// Unified 32/64-bit IMAGE_LOAD_CONFIG_DIRECTORY fields
 type ImageLoadConfigDirectory = ImageLoadConfigDirectory64;
 impl From<ImageLoadConfigDirectory32> for ImageLoadConfigDirectory {
     fn from(cfg: ImageLoadConfigDirectory32) -> Self {
@@ -195,6 +200,7 @@ impl From<ImageLoadConfigDirectory32> for ImageLoadConfigDirectory {
     }
 }
 
+/// Address Space Layout Randomization: `None`, `DYNBASE`, or `HIGHENTROPYVA`
 #[derive(Deserialize, Serialize, Debug)]
 pub enum ASLR {
     None,
@@ -213,23 +219,66 @@ impl fmt::Display for ASLR {
     }
 }
 
+/// Checksec result struct for PE32/32+ binaries
+///
+/// **Example**
+///
+/// ```rust
+/// use checksec::pe::PEProperties;
+/// use goblin::pe::PE;
+/// use memmap::Mmap;
+/// use std::fs;
+///
+/// pub fn print_results(binary: &String) {
+///     if let Ok(fp) = fs::File::open(&binary) {
+///         if let Ok(buf) = unsafe { Mmap::map(&fp) } {
+///             if let Ok(obj) = Object::parse(&buf) {
+///                 match obj {
+///                     Object::PE(pe) => println!(
+///                         "{:#?}",
+///                         PECheckSecResults::parse(&pe, &buf)
+///                     ),
+///                     _ => println!("Not an pe binary."),
+///                 }
+///             }
+///         }
+///     }
+/// }
+/// ```
+///
+/// Some of the mitigations/security features that are checked require
+/// access to the underlying binary file to parse, so both the goblin
+/// object and a read-only memory-mapped version of the original file
+/// must be provided for evaluating PE32/32+ binaries.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PECheckSecResults {
-    aslr: ASLR,
-    authenticode: bool,
-    cfg: bool,
-    clr: bool,
-    dep: bool,
-    dynamic_base: bool,
-    force_integrity: bool,
-    gs: bool,
-    high_entropy_va: bool,
-    isolation: bool,
-    rfg: bool,
-    safeseh: bool,
-    seh: bool,
+    /// Address Space Layout Randomization
+    pub aslr: ASLR,
+    /// Authenticode
+    pub authenticode: bool,
+    /// Control Flow Guard (`/guard:cf`)
+    pub cfg: bool,
+    /// Common Language Runtime *(.NET Framework)*
+    pub clr: bool,
+    /// Data Execution Prevention
+    pub dep: bool,
+    /// Dynamic Base
+    pub dynamic_base: bool,
+    /// Force Integrity (`/INTEGRITYCHECK`)
+    pub force_integrity: bool,
+    /// Buffer Security Check (`/GS`)
+    pub gs: bool,
+    /// 64-bit ASLR (`/HIGHENTROPYVA`)
+    pub high_entropy_va: bool,
+    /// Allow Isolation (`/ALLOWISOLATION`)
+    pub isolation: bool,
+    /// Return Flow Guard
+    pub rfg: bool,
+    /// Safe Structured Exception Handler (`/SAFESEH`)
+    pub safeseh: bool,
+    /// Structured Exception Handler
+    pub seh: bool,
 }
-
 impl PECheckSecResults {
     pub fn parse(pe: &PE, buffer: &Mmap) -> PECheckSecResults {
         PECheckSecResults {
@@ -250,6 +299,7 @@ impl PECheckSecResults {
     }
 }
 impl fmt::Display for PECheckSecResults {
+    /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -285,22 +335,99 @@ impl fmt::Display for PECheckSecResults {
     }
 }
 
+/// checksec Trait implementation for
+/// [goblin::pe::PE](https://docs.rs/goblin/latest/goblin/pe/struct.PE.html)
+///
+/// **Example**
+///
+/// ```rust
+/// use checksec::pe::PEProperties;
+/// use goblin::pe::PE;
+/// use memmap::Mmap;
+/// use std::fs;
+///
+/// pub fn print_results(binary: &String) {
+///     if let Ok(fp) = fs::File::open(&binary) {
+///         if let Ok(buf) = unsafe { Mmap::map(&fp) } {
+///             if let Ok(pe) = PE::parse(&buf) {
+///                 println!("aslr: {}", pe.has_aslr());
+///                 println!("gs: {}", pe.has_gs(&buf));
+///             }
+///         }
+///     }
+/// }
+/// ```
+///
+/// Some of the mitigations/security features that are checked require
+/// access to the underlying binary file, so both the goblin object and a
+/// read-only memory-mapped version of the original file must be provided
+/// for check functions that require it.
 pub trait PEProperties {
+    /// check for both `IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE` *(0x0040)* and
+    /// `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(0x0020)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_aslr(&self) -> ASLR;
+    /// check flags in the `IMAGE_LOAD_CONFIG_CODE_INTEGRITY` structure linked
+    /// from `IMAGE_LOAD_CONFIG_DIRECTORY32/64` within the
+    /// `IMAGE_OPTIONAL_HEADER32/64`
+    ///
+    /// requires a
+    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// of the original file to read & parse required information from the
+    /// underlying binary file
     fn has_authenticode(&self, mem: &memmap::Mmap) -> bool;
+    /// check for `IMAGE_DLLCHARACTERISTICS_GUARD_CF` *(0x4000)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_cfg(&self) -> bool;
+    /// check for Common Language Runtime header within the
+    /// `IMAGE_OPTIONAL_HEADER32/64`
     fn has_clr(&self) -> bool;
+    /// check for `IMAGE_DLLCHARACTERISTICS_NX_COMPAT` *(0x0100)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_dep(&self) -> bool;
+    /// check for `IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE` *(0x0040)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_dynamic_base(&self) -> bool;
+    /// check for `IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY` *(0x0080)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_force_integrity(&self) -> bool;
+    /// check value of `security_cookie` in the
+    /// `IMAGE_LOAD_CONFIG_DIRECTORY32/64` from the
+    /// `IMAGE_OPTIONAL_HEADER32/64`
+    ///
+    /// requires a
+    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// of the original file to read & parse required information from the
+    /// underlying binary file
     fn has_gs(&self, mem: &memmap::Mmap) -> bool;
+    /// check for `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(0x0020)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_high_entropy_va(&self) -> bool;
+    /// check for `IMAGE_DLLCHARACTERISTICS_NO_ISOLATION` *(0x0200)* in
+    /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_isolation(&self) -> bool;
+    /// check `guard_flags` for `IMAGE_GUARD_RF_INSTRUMENTED` *(0x00020000)*
+    /// along with `IMAGE_GUARD_RF_ENABLE` *(0x00040000)* or
+    /// IMAGE_GUARD_RF_STRICT *(0x0008_0000)* in `IMAGE_DATA_DIRECTORY`
+    /// from the `IMAGE_OPTIONAL_HEADER32/64`
+    ///
+    /// requires a
+    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// of the original file to read & parse required information from the
+    /// underlying binary file
     fn has_rfg(&self, mem: &memmap::Mmap) -> bool;
+    /// check `shandler_count` from `LOAD_CONFIG` in `IMAGE_DATA_DIRECTORY`
+    /// linked from the the `IMAGE_OPTIONAL_HEADER32/64`
+    ///
+    /// requires a
+    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// of the original file to read and parse required information from the
+    /// underlying binary file
     fn has_safe_seh(&self, mem: &memmap::Mmap) -> bool;
+    /// check IMAGE_DLLCHARACTERISTICS_NO_SEH from the
+    /// IMAGE_OPTIONAL_HEADER32/64
     fn has_seh(&self) -> bool;
 }
-
 impl PEProperties for PE<'_> {
     fn has_aslr(&self) -> ASLR {
         if self.has_dynamic_base() & self.has_high_entropy_va() {
@@ -402,7 +529,10 @@ impl PEProperties for PE<'_> {
         if let Some(optional_header) = self.header.optional_header {
             let dllcharacteristics: u16 =
                 optional_header.windows_fields.dll_characteristics;
-            return matches!(dllcharacteristics & 0x20, x if x != 0);
+            return matches!(
+                dllcharacteristics & IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA,
+                x if x != 0
+            );
         }
         false
     }

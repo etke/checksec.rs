@@ -1,5 +1,7 @@
 ![checksec.rs](./resources/checksec.svg)
 
+[![crates.io](https://img.shields.io/badge/crates.io-v0.0.2-orange.svg)](https://crates.io/crates/checksec) [![docs.rs](https://docs.rs/checksec/badge.svg)](https://docs.rs/checksec)
+
 Fast multi-platform (ELF/PE/MachO) binary checksec written in Rust.
 
 *\*under active development, cargo crate releases periodically*
@@ -90,7 +92,7 @@ use checksec::pe::PEProperties;
 
 You will now have access to all the implemented check functions directly from the `goblin::Object`.
 
-See `examples/` for library usage examples.
+See [examples/](https://github.com/etke/checksec.rs/tree/master/examples) for library usage examples.
 
 ## Todo
 
@@ -117,7 +119,6 @@ See `examples/` for library usage examples.
 ### project todos
 
 * Tests *(cargo test)*
-* Documentation
 * Github Actions
 
 ## Contributing

@@ -1,4 +1,3 @@
-
 extern crate colored;
 extern crate goblin;
 extern crate ignore;
@@ -27,8 +26,7 @@ fn parse(file: &Path) -> Result<Binary, Error> {
     if let Err(err) = fp {
         return Err(Error::IO(err));
     }
-    let buffer = unsafe { Mmap::map(&fp.unwrap()) };
-    if let Ok(buffer) = buffer {
+    if let Ok(buffer) = unsafe { Mmap::map(&fp.unwrap()) } {
         match Object::parse(&buffer)? {
             Object::Elf(elf) => {
                 let results: ElfCheckSecResults =

@@ -1,3 +1,4 @@
+//! Implements checksec for ELF binaries
 use colored::*;
 use goblin::elf::dynamic::{
     DF_1_PIE, DF_BIND_NOW, DT_FLAGS, DT_FLAGS_1, DT_RPATH, DT_RUNPATH,
@@ -5,13 +6,12 @@ use goblin::elf::dynamic::{
 use goblin::elf::header::ET_DYN;
 use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
 use goblin::elf::Elf;
-
 use serde_derive::{Deserialize, Serialize};
-
 use std::fmt;
 
 use crate::shared::{colorize_bool, Rpath, VecRpath};
 
+/// Relocation Read-Only mode: `None`, `Partial`, or `Full`
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub enum Relro {
     None,
@@ -28,6 +28,7 @@ impl fmt::Display for Relro {
     }
 }
 
+/// Position Indepedent Executable mode: `None`, `DSO`, or `PIE`
 #[derive(Debug, Deserialize, Serialize)]
 pub enum PIE {
     None,
@@ -44,21 +45,49 @@ impl fmt::Display for PIE {
     }
 }
 
+/// Checksec result struct for ELF32/64 binaries
+///
+/// **Example**
+///
+/// ```rust
+/// use checksec::elf::ElfCheckSecResults;
+/// use goblin::elf::Elf;
+/// use std::fs;
+///
+/// pub fn print_results(binary: &String) {
+///     if let Ok(fp) = fs::File::open(&binary) {
+///         if let Ok(buf) = fs::read(fp) {
+///             if let Ok(elf) = Elf::parse(&buf) {
+///                 println!("{:#?}", ElfCheckSecResults::parse(&elf));
+///             }
+///         }
+///     }
+/// }
+/// ```
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ElfCheckSecResults {
-    canary: bool,
-    clang_cfi: bool,
-    clang_safestack: bool,
-    fortify: bool,
-    fortified: u32,
+    /// Stack Canary (*CFLAGS=*`-fstack-protector*`)
+    pub canary: bool,
+    /// Clang Control Flow Integrity (*CFLAGS=*`-fsanitize=cfi-*`)
+    pub clang_cfi: bool,
+    /// Clang SafeStack (*CFLAGS=*`-fsanitize=safe-stack`)
+    pub clang_safestack: bool,
+    /// Fortify (*CFLAGS=*`-D_FORTIFY_SOURCE`)
+    pub fortify: bool,
+    /// Fortified functions
+    pub fortified: u32,
     //fortifiable:  Option<Vec<OsString>>,
-    nx: bool,
-    pie: PIE,
-    relro: Relro,
-    rpath: VecRpath,
-    runpath: VecRpath,
+    /// No Execute
+    pub nx: bool,
+    /// Position Inpendent Executable (*CFLAGS=*`-pie -fPIE`)
+    pub pie: PIE,
+    /// Relocation Read-Only
+    pub relro: Relro,
+    /// Run-time search path (`DT_RPATH`)
+    pub rpath: VecRpath,
+    /// Run-time search path (`DT_RUNTIME`)
+    pub runpath: VecRpath,
 }
-
 impl ElfCheckSecResults {
     pub fn parse(elf: &Elf) -> ElfCheckSecResults {
         ElfCheckSecResults {
@@ -76,6 +105,7 @@ impl ElfCheckSecResults {
     }
 }
 impl fmt::Display for ElfCheckSecResults {
+    /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -104,19 +134,53 @@ impl fmt::Display for ElfCheckSecResults {
     }
 }
 
+/// checksec Trait implementation for
+/// [goblin::elf::Elf](https://docs.rs/goblin/latest/goblin/elf/struct.Elf.html)
+///
+/// **Example**
+///
+/// ```rust
+/// use checksec::elf::ElfProperties;
+/// use goblin::elf::Elf;
+/// use std::fs;
+///
+/// pub fn print_results(binary: &String) {
+///     if let Ok(fp) = fs::File::open(&binary) {
+///         if let Ok(buf) = fs::read(fp) {
+///             if let Ok(elf) = Elf::parse(&buf) {
+///                 println!("Canary: {}", elf.has_canary());
+///             }
+///         }
+///     }
+/// }
+/// ```
 pub trait ElfProperties {
+    /// check for `__stack_chk_fail` or `__intel_security_cookie` in dynstrtab
     fn has_canary(&self) -> bool;
+    /// check for symbols containing `.cfi` in dynstrtab
     fn has_clang_cfi(&self) -> bool;
+    /// check for `__safestack_init` in dynstrtab
     fn has_clang_safestack(&self) -> bool;
+    /// check for symbols ending in `_chk` from dynstrtab
     fn has_fortify(&self) -> bool;
+    /// counts symbols ending in `_chk` from dynstrtab
     fn has_fortified(&self) -> u32;
     // requires running platform to be Linux
     //fn has_fortifiable(&self) -> u32;
+    /// check `p_flags` of the `PT_GNU_STACK` ELF header
     fn has_nx(&self) -> bool;
+    /// check `d_val` of `DT_FLAGS`/`DT_FLAGS_1` of the `PT_DYN ELF` header
     fn has_pie(&self) -> PIE;
+    /// check `d_val` is `DF_BIND_NOW` for `DT_FLAGS`/`DT_FLAGS_1` of the
+    /// `PT_GNU_RELRO ELF` program header
     fn has_relro(&self) -> Relro;
+    /// check the`.dynamic` section for `DT_RUNPATH` and return results in a
+    /// VecRpath
     fn has_rpath(&self) -> VecRpath;
+    /// check the `.dynamic` section for `DT_RPATH` and return results in a
+    /// VecRpath
     fn has_runpath(&self) -> VecRpath;
+    /// return the corresponding string from dynstrtab for a given `d_tag`
     fn get_dynstr_by_tag(&self, tag: u64) -> Option<String>;
 }
 

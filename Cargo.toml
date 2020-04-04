@@ -5,14 +5,15 @@ authors = ["etke"]
 edition = "2018"
 license = "Apache-2.0"
 description = "Fast multi-platform (ELF/PE/MachO) binary checksec command line utility and library."
-homepage = "https://github.com/etke/checksec.rs"
+homepage = "https://crates.io/crates/checksec"
 repository = "https://github.com/etke/checksec.rs"
-documentation = "https://github.com/etke/checksec.rs"
+documentation = "https://docs.rs/checksec"
 keywords = ["checksec", "binary", "security"]
 categories = ["command-line-utilities"]
 include = [
     "src/*.rs",
-    "Cargo.toml"
+    "Cargo.toml",
+    "README.md"
 ]
 
 [dependencies]
