@@ -1,0 +1,61 @@
+name: github actions
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+   branches: [ master ]
+
+jobs:
+  build_and_test:
+    name: checksec build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        build: [ linux-stable, linux-nightly, macos-stable, win32-stable, win64-stable ]
+        include:
+          - build: linux-stable
+            os: ubuntu-latest
+            rust: stable
+          - build: linux-nightly
+            os: ubuntu-latest
+            rust: nightly
+          - build: macos-stable
+            os: macos-latest
+            rust: stable
+          - build: win32-stable
+            os: windows-latest
+            rust: stable-i686-msvc
+          - build: win64-stable
+            os: windows-latest
+            rust: stable-x86_64-msvc
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    steps:
+    - uses: actions/checkout@master
+    - name: cache CARGO_HOME
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo
+        key: ${{ runner.os }}-cargo-home-${{ hashFiles('**/Cargo.toml') }}
+        restore-keys: ${{ runner.os }}-cargo-home
+    - name: install rust
+      shell: bash
+      run: |
+        curl -sSL https://sh.rustup.rs | sh -s -- -y --profile=minimal --default-toolchain=none
+        export PATH="$HOME/.cargo/bin:$PATH"
+        rustup override set ${{ matrix.rust }}
+        echo "##[add-path]$HOME/.cargo/bin"
+    - name: rustfmt
+      shell: bash
+      if: startsWith(runner.os, 'Linux') && matrix.rust == 'stable'
+      run: |
+        rustup component add rustfmt
+        cargo fmt -- --check
+    - name: clippy
+      shell: bash
+      if: startsWith(runner.os, 'Linux') && matrix.rust == 'stable'
+      run: |
+        rustup component add clippy
+        cargo clippy
+    - run: cargo build
+    - run: cargo build --all-targets
