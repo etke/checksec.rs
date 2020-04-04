@@ -19,9 +19,9 @@ impl fmt::Display for BinType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             BinType::Elf32 => write!(f, "{}", "ELF32".bold().underline()),
-            BinType::Elf64 => write!(f, "{}", "ELF32".bold().underline()),
+            BinType::Elf64 => write!(f, "{}", "ELF64".bold().underline()),
             BinType::PE32 => write!(f, "{}", "PE32".bold().underline()),
-            BinType::PE64 => write!(f, "{}", "PE32".bold().underline()),
+            BinType::PE64 => write!(f, "{}", "PE64".bold().underline()),
             BinType::MachO32 => write!(f, "{}", "MachO32".bold().underline()),
             BinType::MachO64 => write!(f, "{}", "MachO64".bold().underline()),
         }

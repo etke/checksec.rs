@@ -59,7 +59,7 @@ Usage: checksec <-f|-d> <file|directory> [--json]
 
 ```sh
 $ checksec -f test/binaries/true-x86_64
-ELF32: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 2 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File:
+ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 2 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File:
  test/binaries/true-x86_64
 ```
 
@@ -83,6 +83,7 @@ checksec = { version = "0.0.2", features = ["elf", "macho", "pe"] }
 ```
 
 Now in your project source, specify dependency on the `checksec` crate and import the `*Properties` trait(s).
+
 ```rust
 extern crate checksec;
 use checksec::elf::ElfProperties;
