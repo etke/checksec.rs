@@ -13,8 +13,10 @@ categories = ["command-line-utilities"]
 include = [
     "src/*.rs",
     "Cargo.toml",
-    "README.md"
+    "README.md",
+    "LICENSE"
 ]
+readme = "README.md"
 
 [dependencies]
 colored = "1.9.3"

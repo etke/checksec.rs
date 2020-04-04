@@ -1,6 +1,6 @@
 ![checksec.rs](./resources/checksec.svg)
 
-[![crates.io](https://img.shields.io/badge/crates.io-v0.0.2-orange.svg)](https://crates.io/crates/checksec) [![docs.rs](https://docs.rs/checksec/badge.svg)](https://docs.rs/checksec) [![github-actions](https://github.com/etke/checksec.rs/workflows/github%20actions/badge.svg?branch=master)](https://github.com/etke/checksec.rs/actions)
+[![crates.io](https://img.shields.io/crates/v/checksec.svg)](https://crates.io/crates/checksec) [![docs.rs](https://docs.rs/checksec/badge.svg)](https://docs.rs/checksec) [![github-actions](https://github.com/etke/checksec.rs/workflows/github%20actions/badge.svg?branch=master)](https://github.com/etke/checksec.rs/actions)
 
 Fast multi-platform (ELF/PE/MachO) binary checksec written in Rust.
 
