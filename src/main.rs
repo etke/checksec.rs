@@ -21,7 +21,7 @@ use checksec::elf::ElfCheckSecResults;
 use checksec::macho::MachOCheckSecResults;
 use checksec::pe::PECheckSecResults;
 
-fn parse(file: &Path) -> Result<Binary, Error> {
+fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     let fp = fs::File::open(file);
     if let Err(err) = fp {
         return Err(Error::IO(err));
@@ -33,21 +33,21 @@ fn parse(file: &Path) -> Result<Binary, Error> {
                     ElfCheckSecResults::parse(&elf);
                 let bin_type =
                     if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
-                return Ok(Binary {
+                return Ok(vec![Binary {
                     binarytype: bin_type,
                     file: file.display().to_string(),
                     properties: BinSpecificProperties::Elf(results),
-                });
+                }]);
             }
             Object::PE(pe) => {
                 let results = PECheckSecResults::parse(&pe, &buffer);
                 let bin_type =
                     if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
-                return Ok(Binary {
+                return Ok(vec![Binary {
                     binarytype: bin_type,
                     file: file.display().to_string(),
                     properties: BinSpecificProperties::PE(results),
-                });
+                }]);
             }
             Object::Mach(mach) => match mach {
                 Mach::Binary(macho) => {
@@ -57,32 +57,29 @@ fn parse(file: &Path) -> Result<Binary, Error> {
                     } else {
                         BinType::MachO32
                     };
-                    return Ok(Binary {
+                    return Ok(vec![Binary {
                         binarytype: bin_type,
                         file: file.display().to_string(),
                         properties: BinSpecificProperties::MachO(results),
-                    });
+                    }]);
                 }
                 Mach::Fat(fatmach) => {
+                    let mut fat_bins: Vec<Binary> = Vec::new();
                     for (idx, _) in fatmach.iter_arches().enumerate() {
                         let container: MachO = fatmach.get(idx).unwrap();
-                        // TODO: change `parse()` to return Vec<Binary>
-                        // for now only grab the result from the 64-bit object
-                        // from a given Fat Mach-O binary
-                        if container.is_64 {
-                            let results =
-                                MachOCheckSecResults::parse(&container);
-                            let bin_type = BinType::MachO64;
-                            return Ok(Binary {
-                                binarytype: bin_type,
-                                file: file.display().to_string(),
-                                properties: BinSpecificProperties::MachO(
-                                    results,
-                                ),
-                            });
-                        }
+                        let results = MachOCheckSecResults::parse(&container);
+                        let bin_type = if container.is_64 {
+                            BinType::MachO64
+                        } else {
+                            BinType::MachO32
+                        };
+                        fat_bins.append(&mut vec![Binary {
+                            binarytype: bin_type,
+                            file: file.display().to_string(),
+                            properties: BinSpecificProperties::MachO(results),
+                        }]);
                     }
-                    return Err(Error::BadMagic(0));
+                    return Ok(fat_bins);
                 }
             },
             _ => return Err(Error::BadMagic(0)),
@@ -92,16 +89,18 @@ fn parse(file: &Path) -> Result<Binary, Error> {
 }
 
 fn walk(basepath: &Path, json: bool) {
-    let mut bins = Vec::new();
+    let mut bins: Vec<Binary> = Vec::new();
     for result in Walk::new(basepath) {
         if let Ok(entry) = result {
             if let Some(filetype) = entry.file_type() {
                 if filetype.is_file() {
-                    if let Ok(result) = parse(entry.path()) {
+                    if let Ok(mut result) = parse(entry.path()) {
                         if json {
-                            bins.push(result);
+                            bins.append(&mut result);
                         } else {
-                            println!("{}", result);
+                            for bin in result.iter() {
+                                println!("{}", bin);
+                            }
                         }
                     }
                 }
@@ -131,12 +130,12 @@ fn main() {
                             if json {
                                 println!(
                                     "{}",
-                                    &json!(Binaries {
-                                        binaries: vec![results]
-                                    })
+                                    &json!(Binaries { binaries: results })
                                 );
                             } else {
-                                println!("{}", results);
+                                for result in results.iter() {
+                                    println!("{}", result);
+                                }
                             }
                         }
                     }

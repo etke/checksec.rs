@@ -114,7 +114,6 @@ See [examples/](https://github.com/etke/checksec.rs/tree/master/examples) for li
 
 ### checksec todos
 
-* `parse()` to return multiple results in case of multi-arch Fat MachO
 * Check running processes
 
 ### project todos
