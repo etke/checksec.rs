@@ -18,16 +18,22 @@ include = [
 ]
 readme = "README.md"
 
+[profile.release]
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+lto = true          # Enable Link Time Optimization
+opt-level = 'z'     # Optimize for size
+panic = 'abort'     # Abort on panic
+
 [dependencies]
 colored = "1.9.3"
 goblin = "0.2.1"
-ignore = "0.4.13"
+ignore = "0.4.14"
 memmap = "0.7.0"
 scroll = "0.10.1"
 scroll_derive = "0.10.1"
-serde = { version = "1.0.105", features = ["derive"] }
-serde_derive = "1.0.105"
-serde_json = "1.0.50"
+serde = { version = "1.0.106", features = ["derive"] }
+serde_derive = "1.0.106"
+serde_json = "1.0.51"
 
 [lib]
 name = "checksec"
