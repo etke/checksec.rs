@@ -79,7 +79,7 @@ Add `checksec` crate dependency to your project `Cargo.toml`.
 
 ```toml
 [dependencies]
-checksec = { version = "0.0.2", features = ["elf", "macho", "pe"] }
+checksec = { version = "0.0.3", features = ["elf", "macho", "pe"] }
 ```
 
 Now in your project source, specify dependency on the `checksec` crate and import the `*Properties` trait(s).
