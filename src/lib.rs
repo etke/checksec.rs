@@ -1,4 +1,4 @@
-//! ![checksec](./../../../resources/checksec.svg)
+//! ![checksec](https://raw.githubusercontent.com/etke/checksec.rs/master/resources/checksec.svg?sanitize=true)
 //!
 //! Checksec is a standalone command line utility and library that provides
 //! binary executable security-oriented property checks for ELF, PE, and MachO

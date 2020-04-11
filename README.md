@@ -59,16 +59,14 @@ Usage: checksec <-f|-d> <file|directory> [--json]
 
 ```sh
 $ checksec -f test/binaries/true-x86_64
-ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 2 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File:
- test/binaries/true-x86_64
+ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 2 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File: test/binaries/true-x86_64
 ```
 
 json output
 
 ```sh
 $ checksec -f test/binaries/true-x86_64 --json
-{"binaries":[{"binarytype":"Elf64","file":"test/binaries/true-x86_64","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":fal
-se,"fortified":2,"fortify":true,"nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}]}
+{"binaries":[{"binarytype":"Elf64","file":"test/binaries/true-x86_64","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":false,"fortified":2,"fortify":true,"nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}]}
 ```
 
 #### libchecksec
