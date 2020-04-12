@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        build: [ linux-stable, linux-nightly, macos-stable, win32-stable, win64-stable ]
+        build: [ linux-stable, linux-nightly, macos-stable, macos-nightly, win32-stable, win32-nightly, win64-stable, win64-nightly ]
         include:
           - build: linux-stable
             os: ubuntu-latest
@@ -22,12 +22,21 @@ jobs:
           - build: macos-stable
             os: macos-latest
             rust: stable
+          - build: macos-nightly
+            os: macos-latest
+            rust: nightly
           - build: win32-stable
             os: windows-latest
             rust: stable-i686-msvc
+          - build: win32-nightly
+            os: windows-latest
+            rust: nightly-i686-msvc
           - build: win64-stable
             os: windows-latest
             rust: stable-x86_64-msvc
+          - build: win64-nightly
+            os: windows-latest
+            rust: nightly-x86_64-msvc
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
     steps:
