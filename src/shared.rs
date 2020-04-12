@@ -1,4 +1,5 @@
 //! Implements shared functionalities between elf/macho modules
+#[cfg(feature = "color")]
 use colored::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -20,6 +21,22 @@ impl VecRpath {
         VecRpath { paths: v }
     }
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for VecRpath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s: Vec<String> = Vec::<String>::new();
+        for v in &self.paths {
+            match v {
+                Rpath::Yes(p) => s.push(p.to_string()),
+                Rpath::YesRW(p) => s.push(p.to_string()),
+                Rpath::None => s.push("None".to_string()),
+            }
+        }
+        write!(f, "{}", s.join(":"))?;
+        Ok(())
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for VecRpath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s: Vec<String> = Vec::<String>::new();
@@ -32,14 +49,5 @@ impl fmt::Display for VecRpath {
         }
         write!(f, "{}", s.join(":"))?;
         Ok(())
-    }
-}
-
-/// dirty hack to return colorized boolean result as a String
-pub fn colorize_bool(tf: bool) -> String {
-    if tf {
-        format!("{}", tf).bright_green().to_string()
-    } else {
-        format!("{}", tf).red().to_string()
     }
 }

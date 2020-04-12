@@ -25,7 +25,7 @@ opt-level = 'z'     # Optimize for size
 panic = 'abort'     # Abort on panic
 
 [dependencies]
-colored = "1.9.3"
+colored = { version = "1.9.3", optional = true }
 goblin = "0.2.1"
 ignore = "0.4.14"
 memmap = "0.7.0"
@@ -44,7 +44,8 @@ name = "checksec"
 path = "src/main.rs"
 
 [features]
-default = ["elf", "macho", "pe", "shared"]
+color = ["colored"]
+default = ["elf", "macho", "pe", "color"]
 elf = ["shared"]
 macho = ["shared"]
 pe = []

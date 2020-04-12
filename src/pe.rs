@@ -1,4 +1,5 @@
 //! Implements checksec for PE32/32+ binaries
+#[cfg(feature = "color")]
 use colored::*;
 use goblin::pe::utils::get_data;
 use goblin::pe::PE;
@@ -7,7 +8,8 @@ use scroll_derive::Pread;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::shared::colorize_bool;
+#[cfg(feature = "color")]
+use crate::colorize_bool;
 
 const IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA: u16 = 0x0020;
 const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
@@ -207,6 +209,17 @@ pub enum ASLR {
     DynamicBase,
     HighEntropyVa,
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for ASLR {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ASLR::None => write!(f, "None"),
+            ASLR::DynamicBase => write!(f, "DYNBASE"),
+            ASLR::HighEntropyVa => write!(f, "HIGHENTROPYVA"),
+        }
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for ASLR {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -298,6 +311,31 @@ impl PECheckSecResults {
         }
     }
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for PECheckSecResults {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ASLR: {} Authenticode: {} CFG: {} CLR: {} DEP: {} \
+            Dynamic Base: {} Force Integrity: {} GS: {} \
+            High Entropy VA: {} Isolation: {} RFG: {} SafeSEH: {} SEH: {}",
+            self.aslr,
+            self.authenticode,
+            self.cfg,
+            self.clr,
+            self.dep,
+            self.dynamic_base,
+            self.force_integrity,
+            self.gs,
+            self.high_entropy_va,
+            self.isolation,
+            self.rfg,
+            self.safeseh,
+            self.seh
+        )
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for PECheckSecResults {
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -308,29 +346,29 @@ impl fmt::Display for PECheckSecResults {
             "ASLR:".bold(),
             self.aslr,
             "Authenticode:".bold(),
-            colorize_bool(self.authenticode),
+            colorize_bool!(self.authenticode),
             "CFG:".bold(),
-            colorize_bool(self.cfg),
+            colorize_bool!(self.cfg),
             "CLR:".bold(),
-            colorize_bool(self.clr),
+            colorize_bool!(self.clr),
             "DEP:".bold(),
-            colorize_bool(self.dep),
+            colorize_bool!(self.dep),
             "Dynamic Base:".bold(),
-            colorize_bool(self.dynamic_base),
+            colorize_bool!(self.dynamic_base),
             "Force Integrity:".bold(),
-            colorize_bool(self.force_integrity),
+            colorize_bool!(self.force_integrity),
             "GS:".bold(),
-            colorize_bool(self.gs),
+            colorize_bool!(self.gs),
             "High Entropy VA:".bold(),
-            colorize_bool(self.high_entropy_va),
+            colorize_bool!(self.high_entropy_va),
             "Isolation:".bold(),
-            colorize_bool(self.isolation),
+            colorize_bool!(self.isolation),
             "RFG:".bold(),
-            colorize_bool(self.rfg),
+            colorize_bool!(self.rfg),
             "SafeSEH:".bold(),
-            colorize_bool(self.safeseh),
+            colorize_bool!(self.safeseh),
             "SEH:".bold(),
-            colorize_bool(self.seh)
+            colorize_bool!(self.seh)
         )
     }
 }

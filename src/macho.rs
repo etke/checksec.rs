@@ -1,4 +1,5 @@
 //! Implements checksec for MachO binaries
+#[cfg(feature = "color")]
 use colored::*;
 use goblin;
 use goblin::mach::load_command::CommandVariant;
@@ -6,8 +7,9 @@ use goblin::mach::MachO;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::shared::colorize_bool;
-//use crate::shared::{colorize_bool, Rpath, VecRpath};
+#[cfg(feature = "color")]
+use crate::colorize_bool;
+//use crate::shared::{Rpath, VecRpath};
 
 const MH_ALLOW_STACK_EXECUTION: u32 = 0x0002_0000;
 const MH_PIE: u32 = 0x0020_0000;
@@ -69,6 +71,29 @@ impl MachOCheckSecResults {
         }
     }
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for MachOCheckSecResults {
+    /// Colorized human readable format output
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ARC: {} Canary: {} Code Signature: {} Encryption: {} \
+            NX Heap: {} NX Stack: {} PIE: {} Restrict: {} \
+            RPath: {}",
+            self.arc,
+            self.canary,
+            self.code_signature,
+            self.encrypted,
+            self.nx_heap,
+            self.nx_stack,
+            self.pie,
+            self.restrict,
+            self.rpath
+        )
+    }
+}
+
+#[cfg(feature = "color")]
 impl fmt::Display for MachOCheckSecResults {
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -76,24 +101,24 @@ impl fmt::Display for MachOCheckSecResults {
             f,
             "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
             "ARC:".bold(),
-            colorize_bool(self.arc),
+            colorize_bool!(self.arc),
             "Canary:".bold(),
-            colorize_bool(self.canary),
+            colorize_bool!(self.canary),
             "Code Signature:".bold(),
-            colorize_bool(self.code_signature),
+            colorize_bool!(self.code_signature),
             "Encrypted:".bold(),
-            colorize_bool(self.encrypted),
+            colorize_bool!(self.encrypted),
             "NX Heap:".bold(),
-            colorize_bool(self.nx_heap),
+            colorize_bool!(self.nx_heap),
             "NX Stack:".bold(),
-            colorize_bool(self.nx_stack),
+            colorize_bool!(self.nx_stack),
             "PIE:".bold(),
-            colorize_bool(self.pie),
+            colorize_bool!(self.pie),
             "Restrict:".bold(),
-            colorize_bool(self.restrict),
+            colorize_bool!(self.restrict),
             "RPath:".bold(),
             //self.rpath
-            colorize_bool(self.rpath)
+            colorize_bool!(self.rpath)
         )
     }
 }

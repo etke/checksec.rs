@@ -1,4 +1,5 @@
 //! Implements checksec for ELF binaries
+#[cfg(feature = "color")]
 use colored::*;
 use goblin::elf::dynamic::{
     DF_1_PIE, DF_BIND_NOW, DT_FLAGS, DT_FLAGS_1, DT_RPATH, DT_RUNPATH,
@@ -9,7 +10,9 @@ use goblin::elf::Elf;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::shared::{colorize_bool, Rpath, VecRpath};
+#[cfg(feature = "color")]
+use crate::colorize_bool;
+use crate::shared::{Rpath, VecRpath};
 
 /// Relocation Read-Only mode: `None`, `Partial`, or `Full`
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -18,6 +21,17 @@ pub enum Relro {
     Partial,
     Full,
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for Relro {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Relro::None => write!(f, "None"),
+            Relro::Partial => write!(f, "Partial"),
+            Relro::Full => write!(f, "Full"),
+        }
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for Relro {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -35,6 +49,17 @@ pub enum PIE {
     DSO,
     PIE,
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for PIE {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            PIE::None => write!(f, "None"),
+            PIE::DSO => write!(f, "DSO"),
+            PIE::PIE => write!(f, "Full"),
+        }
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for PIE {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -104,6 +129,28 @@ impl ElfCheckSecResults {
         }
     }
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for ElfCheckSecResults {
+    /// Colorized human readable format output
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Canary: {} CFI: {} SafeStack: {} Fortify: {} Fortified: {} \
+            NX: {} PIE: {} Relro: {} RPATH: {} RUNPATH: {}",
+            self.canary,
+            self.clang_cfi,
+            self.clang_safestack,
+            self.fortify,
+            self.fortified,
+            self.nx,
+            self.pie,
+            self.relro,
+            self.rpath,
+            self.runpath
+        )
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for ElfCheckSecResults {
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -111,17 +158,17 @@ impl fmt::Display for ElfCheckSecResults {
             f,
             "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
             "Canary:".bold(),
-            colorize_bool(self.canary),
+            colorize_bool!(self.canary),
             "CFI:".bold(),
-            colorize_bool(self.clang_cfi),
+            colorize_bool!(self.clang_cfi),
             "SafeStack:".bold(),
-            colorize_bool(self.clang_safestack),
+            colorize_bool!(self.clang_safestack),
             "Fortify:".bold(),
-            colorize_bool(self.fortify),
+            colorize_bool!(self.fortify),
             "Fortified:".bold(),
             self.fortified,
             "NX:".bold(),
-            colorize_bool(self.nx),
+            colorize_bool!(self.nx),
             "PIE:".bold(),
             self.pie,
             "Relro:".bold(),

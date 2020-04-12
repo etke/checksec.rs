@@ -1,3 +1,4 @@
+#[cfg(feature = "color")]
 use colored::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -15,6 +16,20 @@ pub enum BinType {
     MachO32,
     MachO64,
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for BinType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            BinType::Elf32 => write!(f, "ELF32"),
+            BinType::Elf64 => write!(f, "ELF64"),
+            BinType::PE32 => write!(f, "PE32"),
+            BinType::PE64 => write!(f, "PE64"),
+            BinType::MachO32 => write!(f, "MachO32"),
+            BinType::MachO64 => write!(f, "MachO64"),
+        }
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for BinType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -50,6 +65,17 @@ pub struct Binary {
     pub file: String,
     pub properties: BinSpecificProperties,
 }
+#[cfg(not(feature = "color"))]
+impl fmt::Display for Binary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}: | {} | File: {}",
+            self.binarytype, self.properties, self.file
+        )
+    }
+}
+#[cfg(feature = "color")]
 impl fmt::Display for Binary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

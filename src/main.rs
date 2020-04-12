@@ -1,4 +1,3 @@
-extern crate colored;
 extern crate goblin;
 extern crate ignore;
 extern crate serde_json;
