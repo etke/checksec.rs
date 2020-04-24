@@ -487,7 +487,12 @@ impl PEProperties for PE<'_> {
                 let load_config_val: ImageLoadConfigDirectory =
                     get_data(mem, sections, *load_config_hdr, file_alignment)
                         .unwrap();
-                return load_config_val.code_integrity.flags != 0;
+                if let Some(certificate_table) =
+                    optional_header.data_directories.get_certificate_table()
+                {
+                    return load_config_val.code_integrity.flags != 0
+                        || certificate_table.virtual_address != 0;
+                }
             }
         }
         false
