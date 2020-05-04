@@ -1,6 +1,6 @@
 [package]
 name = "checksec"
-version = "0.0.4"
+version = "0.0.5"
 authors = ["etke"]
 edition = "2018"
 license = "Apache-2.0"
