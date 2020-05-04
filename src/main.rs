@@ -1,7 +1,9 @@
+extern crate clap;
 extern crate goblin;
 extern crate ignore;
 extern crate serde_json;
 
+use clap::{crate_authors, crate_description, crate_version, App, Arg};
 use goblin::error::Error;
 use goblin::mach::{Mach, MachO};
 use goblin::Object;
@@ -9,7 +11,6 @@ use ignore::Walk;
 use memmap::Mmap;
 use serde_json::json;
 
-use std::ffi::OsString;
 use std::path::Path;
 use std::{env, fs, io, process};
 
@@ -111,37 +112,57 @@ fn walk(basepath: &Path, json: bool) {
     }
 }
 
-fn usage() {
-    println!("Usage: checksec <-f|-d> <file|directory> [--json]");
-    process::exit(0);
-}
-
 fn main() {
-    let argv: Vec<OsString> = env::args_os().collect();
-    match argv.len() {
-        3..=4 => {
-            let json = argv.len() == 4 && argv[3] == "--json";
-            if let Some(opt) = argv[1].to_str() {
-                match opt {
-                    "-d" => walk(Path::new(&argv[2]), json),
-                    "-f" => {
-                        if let Ok(results) = parse(Path::new(&argv[2])) {
-                            if json {
-                                println!(
-                                    "{}",
-                                    &json!(Binaries { binaries: results })
-                                );
-                            } else {
-                                for result in results.iter() {
-                                    println!("{}", result);
-                                }
-                            }
-                        }
-                    }
-                    _ => usage(),
+    let args = App::new("checksec")
+        .about(crate_description!())
+        .author(crate_authors!())
+        .version(crate_version!())
+        .arg(
+            Arg::with_name("file")
+                .short("f")
+                .long("file")
+                .value_name("FILE")
+                .help("Target file")
+                .takes_value(true)
+                .conflicts_with("directory"),
+        )
+        .arg(
+            Arg::with_name("directory")
+                .short("d")
+                .long("directory")
+                .value_name("DIRECTORY")
+                .help("Target directory")
+                .takes_value(true)
+                .conflicts_with("file"),
+        )
+        .arg(
+            Arg::with_name("json")
+                .short("j")
+                .long("json")
+                .help("Output in json format"),
+        )
+        .get_matches();
+
+    let json = args.is_present("json");
+    let arg_file = args.value_of("file");
+    let arg_directory = args.value_of("directory");
+
+    // make sure a file or a directory is supplied
+    if arg_file.is_none() && arg_directory.is_none() {
+        println!("{}", args.usage());
+        process::exit(0);
+    }
+    if let Some(directory) = arg_directory {
+        walk(Path::new(&directory), json);
+    } else if let Some(file) = arg_file {
+        if let Ok(results) = parse(Path::new(&file)) {
+            if json {
+                println!("{}", &json!(Binaries { binaries: results }));
+            } else {
+                for result in results.iter() {
+                    println!("{}", result);
                 }
             }
         }
-        _ => usage(),
     }
 }

@@ -50,7 +50,17 @@ For instances where you want to compile for a different target OS or architectur
 ## Usage
 
 ```sh
-Usage: checksec <-f|-d> <file|directory> [--json]
+USAGE:
+    checksec [FLAGS] [OPTIONS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -j, --json       Output in json format
+    -V, --version    Prints version information
+
+OPTIONS:
+    -d, --directory <DIRECTORY>    Target directory
+    -f, --file <FILE>              Target file
 ```
 
 ### Example
