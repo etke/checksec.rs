@@ -1,7 +1,6 @@
 //! Implements checksec for MachO binaries
 #[cfg(feature = "color")]
 use colored::*;
-use goblin;
 use goblin::mach::load_command::CommandVariant;
 use goblin::mach::MachO;
 use serde::{Deserialize, Serialize};

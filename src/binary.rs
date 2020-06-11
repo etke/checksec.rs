@@ -88,8 +88,43 @@ impl fmt::Display for Binary {
         )
     }
 }
+impl Binary {
+    pub fn new(
+        binarytype: BinType,
+        file: String,
+        properties: BinSpecificProperties,
+    ) -> Binary {
+        Binary { binarytype, file, properties }
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct Binaries {
     pub binaries: Vec<Binary>,
+}
+impl Binaries {
+    pub fn new(binaries: Vec<Binary>) -> Binaries {
+        Binaries { binaries }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Process {
+    pub pid: usize,
+    pub binary: Vec<Binary>,
+}
+impl Process {
+    pub fn new(pid: usize, binary: Vec<Binary>) -> Process {
+        Process { pid, binary }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Processes {
+    pub processes: Vec<Process>,
+}
+impl Processes {
+    pub fn new(processes: Vec<Process>) -> Processes {
+        Processes { processes }
+    }
 }

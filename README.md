@@ -54,13 +54,15 @@ USAGE:
     checksec [FLAGS] [OPTIONS]
 
 FLAGS:
-    -h, --help       Prints help information
-    -j, --json       Output in json format
-    -V, --version    Prints version information
+    -h, --help           Prints help information
+    -j, --json           Output in json format
+    -P, --process-all    Check all running processes
+    -V, --version        Prints version information
 
 OPTIONS:
     -d, --directory <DIRECTORY>    Target directory
     -f, --file <FILE>              Target file
+    -p, --process <NAME>           Name of running process to check
 ```
 
 ### Example
@@ -122,7 +124,7 @@ See [examples/](https://github.com/etke/checksec.rs/tree/master/examples) for li
 
 ### checksec todos
 
-* Check running processes
+* ?
 
 ### project todos
 
