@@ -25,17 +25,17 @@ opt-level = 'z'     # Optimize for size
 panic = 'abort'     # Abort on panic
 
 [dependencies]
-clap = "2.33.0"
+clap = "2.33.1"
 colored = { version = "1.9.3", optional = true }
-goblin = "0.2.1"
-ignore = "0.4.14"
+goblin = "0.2.3"
+ignore = "0.4.16"
 memmap = "0.7.0"
 scroll = "0.10.1"
-scroll_derive = "0.10.1"
-serde = { version = "1.0.106", features = ["derive"] }
-serde_derive = "1.0.106"
-serde_json = "1.0.51"
-sysinfo = "0.14.2"
+scroll_derive = "0.10.2"
+serde = { version = "1.0.111", features = ["derive"] }
+serde_derive = "1.0.111"
+serde_json = "1.0.55"
+sysinfo = "0.14.5"
 
 [lib]
 name = "checksec"
