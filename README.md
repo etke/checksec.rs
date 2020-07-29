@@ -56,6 +56,7 @@ USAGE:
 FLAGS:
     -h, --help           Prints help information
     -j, --json           Output in json format
+        --pretty         Human readable json output
     -P, --process-all    Check all running processes
     -V, --version        Prints version information
 

@@ -10,7 +10,7 @@ use goblin::mach::{Mach, MachO};
 use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
-use serde_json::json;
+use serde_json::{json, to_string_pretty, Value};
 use sysinfo::{ProcessExt, System, SystemExt};
 
 use std::path::Path;
@@ -24,6 +24,16 @@ use binary::{
 use checksec::elf::ElfCheckSecResults;
 use checksec::macho::MachOCheckSecResults;
 use checksec::pe::PECheckSecResults;
+
+fn json_print(data: &Value, pretty: bool) {
+    if pretty {
+        if let Ok(json_str) = to_string_pretty(data) {
+            println!("{}", json_str);
+        }
+    } else {
+        println!("{}", data);
+    }
+}
 
 fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     let fp = fs::File::open(file);
@@ -92,7 +102,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     Err(Error::IO(io::Error::last_os_error()))
 }
 
-fn walk(basepath: &Path, json: bool) {
+fn walk(basepath: &Path, json: bool, pretty: bool) {
     let mut bins: Vec<Binary> = Vec::new();
     for result in Walk::new(basepath) {
         if let Ok(entry) = result {
@@ -112,7 +122,7 @@ fn walk(basepath: &Path, json: bool) {
         }
     }
     if json {
-        println!("{}", &json!(Binaries::new(bins)));
+        json_print(&json!(Binaries::new(bins)), pretty);
     }
 }
 
@@ -150,6 +160,11 @@ fn main() {
                 .help("Output in json format"),
         )
         .arg(
+            Arg::with_name("pretty")
+                .long("pretty")
+                .help("Human readable json output"),
+        )
+        .arg(
             Arg::with_name("process")
                 .short("p")
                 .long("process")
@@ -174,6 +189,7 @@ fn main() {
     let json = args.is_present("json");
     let file = args.value_of("file");
     let directory = args.value_of("directory");
+    let pretty = args.is_present("pretty");
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
 
@@ -207,7 +223,7 @@ fn main() {
             }
         }
         if json {
-            println!("{}", &json!(Processes::new(procs)));
+            json_print(&json!(Processes::new(procs)), pretty);
         }
     } else if let Some(procname) = procname {
         let system: System = System::new_all();
@@ -232,14 +248,14 @@ fn main() {
             }
         }
         if json {
-            println!("{}", &json!(Processes::new(procs)));
+            json_print(&json!(Processes::new(procs)), pretty);
         }
     } else if let Some(directory) = directory {
-        walk(Path::new(&directory), json);
+        walk(Path::new(&directory), json, pretty);
     } else if let Some(file) = file {
         if let Ok(results) = parse(Path::new(&file)) {
             if json {
-                println!("{}", &json!(Binaries::new(results)));
+                json_print(&json!(Binaries::new(results)), pretty);
             } else {
                 for result in results.iter() {
                     println!("{}", result);
