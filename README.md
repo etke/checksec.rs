@@ -4,7 +4,7 @@
 
 Fast multi-platform (ELF/PE/MachO) binary checksec written in Rust.
 
-*\*under active development, cargo crate releases periodically*
+*cargo crate releases periodically*
 
 Uses [goblin](https://docs.rs/goblin) to for multi-platform binary parsing support and [ignore](https://docs.rs/ignore) for fast recursive path iteration that respects various filters such as globs, file types and `.gitignore` files and [serde](https://docs.rs/serde) for Serializaiton/Deserialization.
 
@@ -69,16 +69,37 @@ OPTIONS:
 
 #### standalone checksec
 
+##### individual binary
+
 ```sh
 $ checksec -f test/binaries/true-x86_64
 ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 2 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File: test/binaries/true-x86_64
 ```
 
-json output
+##### individual binary (json output)
 
 ```sh
 $ checksec -f test/binaries/true-x86_64 --json
 {"binaries":[{"binarytype":"Elf64","file":"test/binaries/true-x86_64","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":false,"fortified":2,"fortify":true,"nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}]}
+```
+
+##### running processes
+
+```sh
+$ checksec -P
+-zsh(34)
+ ↪ ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 8 NX: true PIE: Full Relro: Full RPATH: None RUNPATH: None | File: /bin/zsh
+checksec(216)
+ ↪ ELF64: | Canary: false CFI: false SafeStack: false Fortify: false Fortified: 0 NX: true PIE: Full Relro: Full RPATH: None RUNPATH: None | File: /home/etke/.cargo/bin/checksec
+init(1)
+ ↪ ELF64: | Canary: false CFI: false SafeStack: false Fortify: false Fortified: 0 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File: /init
+```
+
+##### running proccesses (json output)
+
+```sh
+$ checksec -P --json
+{"processes":[{"binary":[{"binarytype":"Elf64","file":"/bin/zsh","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":false,"fortified":8,"fortify":true,"nx":true,"pie":"PIE","relro":"Full","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}],"pid":34},{"binary":[{"binarytype":"Elf64","file":"/init","properties":{"Elf":{"canary":false,"clang_cfi":false,"clang_safestack":false,"fortified":0,"fortify":false,"nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}],"pid":1},{"binary":[{"binarytype":"Elf64","file":"/home/etke/.cargo/bin/checksec","properties":{"Elf":{"canary":false,"clang_cfi":false,"clang_safestack":false,"fortified":0,"fortify":false,"nx":true,"pie":"PIE","relro":"Full","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}],"pid":232}]}
 ```
 
 #### libchecksec
