@@ -2,7 +2,7 @@
 #[cfg(feature = "color")]
 use colored::*;
 use goblin::elf::dynamic::{
-    DF_1_PIE, DF_BIND_NOW, DT_FLAGS, DT_FLAGS_1, DT_RPATH, DT_RUNPATH,
+    DF_1_NOW, DF_1_PIE, DF_BIND_NOW, DT_RPATH, DT_RUNPATH,
 };
 use goblin::elf::header::ET_DYN;
 use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
@@ -314,13 +314,8 @@ impl ElfProperties for Elf<'_> {
     fn has_pie(&self) -> PIE {
         if self.header.e_type == ET_DYN {
             if let Some(dynamic) = &self.dynamic {
-                for dyns in &dynamic.dyns {
-                    if dyns.d_tag == DT_FLAGS
-                        || dyns.d_tag == DT_FLAGS_1
-                            && DF_1_PIE & dyns.d_val != DF_1_PIE
-                    {
-                        return PIE::PIE;
-                    }
+                if DF_1_PIE & dynamic.info.flags_1 == DF_1_PIE {
+                    return PIE::PIE;
                 }
             }
             return PIE::DSO;
@@ -331,13 +326,10 @@ impl ElfProperties for Elf<'_> {
         for header in &self.program_headers {
             if header.p_type == PT_GNU_RELRO {
                 if let Some(dynamic) = &self.dynamic {
-                    for dyns in &dynamic.dyns {
-                        if dyns.d_tag == DT_FLAGS
-                            || dyns.d_tag == DT_FLAGS_1
-                                && DF_BIND_NOW & dyns.d_val == 0
-                        {
-                            return Relro::Full;
-                        }
+                    if DF_BIND_NOW & dynamic.info.flags == DF_BIND_NOW
+                        && DF_1_NOW & dynamic.info.flags_1 == DF_1_NOW
+                    {
+                        return Relro::Full;
                     }
                 }
                 return Relro::Partial;
