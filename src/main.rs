@@ -16,6 +16,9 @@ use sysinfo::{ProcessExt, System, SystemExt};
 use std::path::Path;
 use std::{env, fs, io, process};
 
+#[cfg(feature = "color")]
+use colored_json::to_colored_json_auto;
+
 mod binary;
 
 use binary::{
@@ -27,7 +30,11 @@ use checksec::pe::PECheckSecResults;
 
 fn json_print(data: &Value, pretty: bool) {
     if pretty {
-        if let Ok(json_str) = to_string_pretty(data) {
+        if cfg!(feature = "color") {
+            if let Ok(colored_json) = to_colored_json_auto(data) {
+                println!("{}", colored_json);
+            }
+        } else if let Ok(json_str) = to_string_pretty(data) {
             println!("{}", json_str);
         }
     } else {
