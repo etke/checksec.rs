@@ -50,7 +50,7 @@ impl fmt::Display for Relro {
     }
 }
 
-/// Position Indepedent Executable mode: `None`, `DSO`, or `PIE`
+/// Position Independent Executable mode: `None`, `DSO`, or `PIE`
 #[derive(Debug, Deserialize, Serialize)]
 pub enum PIE {
     None,

@@ -96,7 +96,7 @@ init(1)
  ↪ ELF64: | Canary: false CFI: false SafeStack: false Fortify: false Fortified: 0 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File: /init
 ```
 
-##### running proccesses (json output)
+##### running processes (json output)
 
 ```sh
 $ checksec -P --json
