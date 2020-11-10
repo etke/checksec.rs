@@ -9,3 +9,19 @@ macro_rules! colorize_bool {
         };
     };
 }
+
+#[macro_export]
+#[cfg(feature = "color")]
+macro_rules! underline {
+    ($str:expr) => {
+        $str.underline()
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "color"))]
+macro_rules! underline {
+    ($str:expr) => {
+        $str
+    };
+}
