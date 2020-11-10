@@ -148,6 +148,7 @@ fn main() {
                 .help("Target file")
                 .takes_value(true)
                 .conflicts_with("directory")
+                .conflicts_with("pid")
                 .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
@@ -159,6 +160,7 @@ fn main() {
                 .help("Target directory")
                 .takes_value(true)
                 .conflicts_with("file")
+                .conflicts_with("pid")
                 .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
@@ -183,6 +185,21 @@ fn main() {
                 .takes_value(true)
                 .conflicts_with("directory")
                 .conflicts_with("file")
+                .conflicts_with("pid")
+                .conflicts_with("process-all"),
+        )
+        .arg(
+            Arg::with_name("pid")
+                .long("pid")
+                .value_name("PID")
+                .help(
+                    "Process ID of running process to check [multiple IDs
+                       can be specified separated by a comma]",
+                )
+                .takes_value(true)
+                .conflicts_with("directory")
+                .conflicts_with("file")
+                .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
         .arg(
@@ -192,6 +209,7 @@ fn main() {
                 .help("Check all running processes")
                 .conflicts_with("directory")
                 .conflicts_with("file")
+                .conflicts_with("pid")
                 .conflicts_with("process"),
         )
         .get_matches();
@@ -200,6 +218,7 @@ fn main() {
     let file = args.value_of("file");
     let directory = args.value_of("directory");
     let pretty = args.is_present("pretty");
+    let procids = args.value_of("pid");
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
 
@@ -228,6 +247,68 @@ fn main() {
         }
         if json {
             json_print(&json!(Processes::new(procs)), pretty);
+        }
+    } else if let Some(procids) = procids {
+        let procids: Vec<sysinfo::Pid> = procids
+            .split(',')
+            .map(|id| match id.parse::<sysinfo::Pid>() {
+                Ok(id) => id,
+                Err(msg) => {
+                    eprintln!("Invalid process ID {}: {}", id, msg);
+                    process::exit(1);
+                }
+            })
+            .collect();
+        let system =
+            System::new_with_specifics(RefreshKind::new().with_processes());
+
+        for procid in procids {
+            let process = match system.get_process(procid) {
+                Some(process) => process,
+                None => {
+                    eprintln!("No process found with ID {}", procid);
+                    continue;
+                }
+            };
+
+            if !process.exe().is_file() {
+                eprintln!(
+                    "No valid executable found for process {} with ID {}: {}",
+                    process.name(),
+                    procid,
+                    process.exe().display()
+                );
+                continue;
+            }
+
+            match parse(&process.exe()) {
+                Ok(results) => {
+                    if json {
+                        json_print(
+                            &json!(Process::new(procid as usize, results)),
+                            pretty,
+                        );
+                    } else {
+                        for result in results.iter() {
+                            println!(
+                                "{}({})\n ↪ {}",
+                                process.name(),
+                                process.pid(),
+                                result
+                            );
+                        }
+                    }
+                }
+                Err(msg) => {
+                    eprintln!(
+                        "Can not parse process {} with ID {}: {}",
+                        process.name(),
+                        procid,
+                        msg
+                    );
+                    continue;
+                }
+            }
         }
     } else if let Some(procname) = procname {
         let system =
