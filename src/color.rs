@@ -3,9 +3,9 @@
 macro_rules! colorize_bool {
     ($tf:expr) => {
         if $tf {
-            format!("{}", $tf).bright_green().to_string()
+            format!("{:<5}", $tf).bright_green().to_string()
         } else {
-            format!("{}", $tf).red().to_string()
+            format!("{:<5}", $tf).red().to_string()
         };
     };
 }
