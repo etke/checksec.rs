@@ -169,7 +169,8 @@ fn main() {
         .arg(
             Arg::with_name("pretty")
                 .long("pretty")
-                .help("Human readable json output"),
+                .help("Human readable json output")
+                .requires("json"),
         )
         .arg(
             Arg::with_name("process")
