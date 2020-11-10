@@ -200,13 +200,6 @@ fn main() {
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
 
-    // make sure a file or a directory is supplied
-    if !procall && file.is_none() && directory.is_none() && procname.is_none()
-    {
-        println!("{}", args.usage());
-        process::exit(0);
-    }
-
     if procall {
         let system =
             System::new_with_specifics(RefreshKind::new().with_processes());
@@ -271,5 +264,8 @@ fn main() {
                 }
             }
         }
+    } else {
+        eprintln!("{}", args.usage());
+        process::exit(1);
     }
 }
