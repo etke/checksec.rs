@@ -232,8 +232,13 @@ fn main() {
     } else if let Some(procname) = procname {
         let system =
             System::new_with_specifics(RefreshKind::new().with_processes());
+        let sysprocs = system.get_process_by_name(procname);
+        if sysprocs.is_empty() {
+            eprintln!("No process found matching name {}", procname);
+            process::exit(1);
+        }
         let mut procs: Vec<Process> = Vec::new();
-        for proc_entry in system.get_process_by_name(procname) {
+        for proc_entry in &sysprocs {
             if let Ok(results) = parse(&proc_entry.exe()) {
                 if json {
                     procs.append(&mut vec![Process::new(
