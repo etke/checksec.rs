@@ -11,7 +11,7 @@ use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
 use serde_json::{json, to_string_pretty, Value};
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::{ProcessExt, RefreshKind, System, SystemExt};
 
 use std::path::Path;
 use std::{env, fs, io, process};
@@ -208,7 +208,8 @@ fn main() {
     }
 
     if procall {
-        let system: System = System::new_all();
+        let system =
+            System::new_with_specifics(RefreshKind::new().with_processes());
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.get_processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
@@ -233,7 +234,8 @@ fn main() {
             json_print(&json!(Processes::new(procs)), pretty);
         }
     } else if let Some(procname) = procname {
-        let system: System = System::new_all();
+        let system =
+            System::new_with_specifics(RefreshKind::new().with_processes());
         let mut procs: Vec<Process> = Vec::new();
         for proc_entry in system.get_process_by_name(procname) {
             if let Ok(results) = parse(&proc_entry.exe()) {
