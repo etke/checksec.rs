@@ -256,7 +256,14 @@ fn main() {
             json_print(&json!(Processes::new(procs)), pretty);
         }
     } else if let Some(directory) = directory {
-        walk(Path::new(&directory), json, pretty);
+        let directory_path = Path::new(directory);
+
+        if !directory_path.is_dir() {
+            eprintln!("Directory {} not found", underline!(directory));
+            process::exit(1);
+        }
+
+        walk(directory_path, json, pretty);
     } else if let Some(file) = file {
         let file_path = Path::new(file);
 
