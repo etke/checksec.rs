@@ -24,21 +24,29 @@ pub enum Relro {
 #[cfg(not(feature = "color"))]
 impl fmt::Display for Relro {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Relro::None => write!(f, "None"),
-            Relro::Partial => write!(f, "Partial"),
-            Relro::Full => write!(f, "Full"),
-        }
+        write!(
+            f,
+            "{:<7}",
+            match *self {
+                Relro::None => "None",
+                Relro::Partial => "Partial",
+                Relro::Full => "Full",
+            }
+        )
     }
 }
 #[cfg(feature = "color")]
 impl fmt::Display for Relro {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Relro::None => write!(f, "{}", "None".red()),
-            Relro::Partial => write!(f, "{}", "Partial".yellow()),
-            Relro::Full => write!(f, "{}", "Full".green()),
-        }
+        write!(
+            f,
+            "{:<7}",
+            match *self {
+                Relro::None => "None".red(),
+                Relro::Partial => "Partial".yellow(),
+                Relro::Full => "Full".green(),
+            }
+        )
     }
 }
 
@@ -52,21 +60,29 @@ pub enum PIE {
 #[cfg(not(feature = "color"))]
 impl fmt::Display for PIE {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            PIE::None => write!(f, "None"),
-            PIE::DSO => write!(f, "DSO"),
-            PIE::PIE => write!(f, "Full"),
-        }
+        write!(
+            f,
+            "{:<4}",
+            match *self {
+                PIE::None => "None",
+                PIE::DSO => "DSO",
+                PIE::PIE => "Full",
+            }
+        )
     }
 }
 #[cfg(feature = "color")]
 impl fmt::Display for PIE {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            PIE::None => write!(f, "{}", "None".red()),
-            PIE::DSO => write!(f, "{}", "DSO".yellow()),
-            PIE::PIE => write!(f, "{}", "Full".green()),
-        }
+        write!(
+            f,
+            "{:<4}",
+            match *self {
+                PIE::None => "None".red(),
+                PIE::DSO => "DSO".yellow(),
+                PIE::PIE => "Full".green(),
+            }
+        )
     }
 }
 
@@ -135,7 +151,7 @@ impl fmt::Display for ElfCheckSecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Canary: {} CFI: {} SafeStack: {} Fortify: {} Fortified: {} \
+            "Canary: {} CFI: {} SafeStack: {} Fortify: {} Fortified: {:2} \
             NX: {} PIE: {} Relro: {} RPATH: {} RUNPATH: {}",
             self.canary,
             self.clang_cfi,
@@ -156,7 +172,7 @@ impl fmt::Display for ElfCheckSecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {:2} {} {} {} {} {} {} {} {} {} {}",
             "Canary:".bold(),
             colorize_bool!(self.canary),
             "CFI:".bold(),
