@@ -17,6 +17,7 @@ use std::path::Path;
 use std::{env, fs, io, process};
 
 #[cfg(feature = "color")]
+use colored::Colorize;
 use colored_json::to_colored_json_auto;
 
 mod binary;
@@ -27,6 +28,7 @@ use binary::{
 use checksec::elf::ElfCheckSecResults;
 use checksec::macho::MachOCheckSecResults;
 use checksec::pe::PECheckSecResults;
+use checksec::underline;
 
 fn json_print(data: &Value, pretty: bool) {
     if pretty {
@@ -256,13 +258,30 @@ fn main() {
     } else if let Some(directory) = directory {
         walk(Path::new(&directory), json, pretty);
     } else if let Some(file) = file {
-        if let Ok(results) = parse(Path::new(&file)) {
-            if json {
-                json_print(&json!(Binaries::new(results)), pretty);
-            } else {
-                for result in results.iter() {
-                    println!("{}", result);
+        let file_path = Path::new(file);
+
+        if !file_path.is_file() {
+            eprintln!("File {} not found", underline!(file));
+            process::exit(1);
+        }
+
+        match parse(file_path) {
+            Ok(results) => {
+                if json {
+                    json_print(&json!(Binaries::new(results)), pretty);
+                } else {
+                    for result in results.iter() {
+                        println!("{}", result);
+                    }
                 }
+            }
+            Err(msg) => {
+                eprintln!(
+                    "Can not parse binary file {}: {}",
+                    underline!(file),
+                    msg
+                );
+                process::exit(1);
             }
         }
     } else {
