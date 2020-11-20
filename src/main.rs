@@ -11,12 +11,13 @@ use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
 use serde_json::{json, to_string_pretty, Value};
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::{ProcessExt, RefreshKind, System, SystemExt};
 
 use std::path::Path;
 use std::{env, fs, io, process};
 
 #[cfg(feature = "color")]
+use colored::Colorize;
 use colored_json::to_colored_json_auto;
 
 mod binary;
@@ -27,6 +28,7 @@ use binary::{
 use checksec::elf::ElfCheckSecResults;
 use checksec::macho::MachOCheckSecResults;
 use checksec::pe::PECheckSecResults;
+use checksec::underline;
 
 fn json_print(data: &Value, pretty: bool) {
     if pretty {
@@ -146,6 +148,7 @@ fn main() {
                 .help("Target file")
                 .takes_value(true)
                 .conflicts_with("directory")
+                .conflicts_with("pid")
                 .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
@@ -157,6 +160,7 @@ fn main() {
                 .help("Target directory")
                 .takes_value(true)
                 .conflicts_with("file")
+                .conflicts_with("pid")
                 .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
@@ -169,7 +173,8 @@ fn main() {
         .arg(
             Arg::with_name("pretty")
                 .long("pretty")
-                .help("Human readable json output"),
+                .help("Human readable json output")
+                .requires("json"),
         )
         .arg(
             Arg::with_name("process")
@@ -180,6 +185,21 @@ fn main() {
                 .takes_value(true)
                 .conflicts_with("directory")
                 .conflicts_with("file")
+                .conflicts_with("pid")
+                .conflicts_with("process-all"),
+        )
+        .arg(
+            Arg::with_name("pid")
+                .long("pid")
+                .value_name("PID")
+                .help(
+                    "Process ID of running process to check [multiple IDs
+                       can be specified separated by a comma]",
+                )
+                .takes_value(true)
+                .conflicts_with("directory")
+                .conflicts_with("file")
+                .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
         .arg(
@@ -189,6 +209,7 @@ fn main() {
                 .help("Check all running processes")
                 .conflicts_with("directory")
                 .conflicts_with("file")
+                .conflicts_with("pid")
                 .conflicts_with("process"),
         )
         .get_matches();
@@ -197,18 +218,13 @@ fn main() {
     let file = args.value_of("file");
     let directory = args.value_of("directory");
     let pretty = args.is_present("pretty");
+    let procids = args.value_of("pid");
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
 
-    // make sure a file or a directory is supplied
-    if !procall && file.is_none() && directory.is_none() && procname.is_none()
-    {
-        println!("{}", args.usage());
-        process::exit(0);
-    }
-
     if procall {
-        let system: System = System::new_all();
+        let system =
+            System::new_with_specifics(RefreshKind::new().with_processes());
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.get_processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
@@ -232,10 +248,78 @@ fn main() {
         if json {
             json_print(&json!(Processes::new(procs)), pretty);
         }
+    } else if let Some(procids) = procids {
+        let procids: Vec<sysinfo::Pid> = procids
+            .split(',')
+            .map(|id| match id.parse::<sysinfo::Pid>() {
+                Ok(id) => id,
+                Err(msg) => {
+                    eprintln!("Invalid process ID {}: {}", id, msg);
+                    process::exit(1);
+                }
+            })
+            .collect();
+        let system =
+            System::new_with_specifics(RefreshKind::new().with_processes());
+
+        for procid in procids {
+            let process = match system.get_process(procid) {
+                Some(process) => process,
+                None => {
+                    eprintln!("No process found with ID {}", procid);
+                    continue;
+                }
+            };
+
+            if !process.exe().is_file() {
+                eprintln!(
+                    "No valid executable found for process {} with ID {}: {}",
+                    process.name(),
+                    procid,
+                    process.exe().display()
+                );
+                continue;
+            }
+
+            match parse(&process.exe()) {
+                Ok(results) => {
+                    if json {
+                        json_print(
+                            &json!(Process::new(procid as usize, results)),
+                            pretty,
+                        );
+                    } else {
+                        for result in results.iter() {
+                            println!(
+                                "{}({})\n ↪ {}",
+                                process.name(),
+                                process.pid(),
+                                result
+                            );
+                        }
+                    }
+                }
+                Err(msg) => {
+                    eprintln!(
+                        "Can not parse process {} with ID {}: {}",
+                        process.name(),
+                        procid,
+                        msg
+                    );
+                    continue;
+                }
+            }
+        }
     } else if let Some(procname) = procname {
-        let system: System = System::new_all();
+        let system =
+            System::new_with_specifics(RefreshKind::new().with_processes());
+        let sysprocs = system.get_process_by_name(procname);
+        if sysprocs.is_empty() {
+            eprintln!("No process found matching name {}", procname);
+            process::exit(1);
+        }
         let mut procs: Vec<Process> = Vec::new();
-        for proc_entry in system.get_process_by_name(procname) {
+        for proc_entry in &sysprocs {
             if let Ok(results) = parse(&proc_entry.exe()) {
                 if json {
                     procs.append(&mut vec![Process::new(
@@ -258,16 +342,43 @@ fn main() {
             json_print(&json!(Processes::new(procs)), pretty);
         }
     } else if let Some(directory) = directory {
-        walk(Path::new(&directory), json, pretty);
+        let directory_path = Path::new(directory);
+
+        if !directory_path.is_dir() {
+            eprintln!("Directory {} not found", underline!(directory));
+            process::exit(1);
+        }
+
+        walk(directory_path, json, pretty);
     } else if let Some(file) = file {
-        if let Ok(results) = parse(Path::new(&file)) {
-            if json {
-                json_print(&json!(Binaries::new(results)), pretty);
-            } else {
-                for result in results.iter() {
-                    println!("{}", result);
+        let file_path = Path::new(file);
+
+        if !file_path.is_file() {
+            eprintln!("File {} not found", underline!(file));
+            process::exit(1);
+        }
+
+        match parse(file_path) {
+            Ok(results) => {
+                if json {
+                    json_print(&json!(Binaries::new(results)), pretty);
+                } else {
+                    for result in results.iter() {
+                        println!("{}", result);
+                    }
                 }
             }
+            Err(msg) => {
+                eprintln!(
+                    "Can not parse binary file {}: {}",
+                    underline!(file),
+                    msg
+                );
+                process::exit(1);
+            }
         }
+    } else {
+        eprintln!("{}", args.usage());
+        process::exit(1);
     }
 }

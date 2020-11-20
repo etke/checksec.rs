@@ -3,9 +3,25 @@
 macro_rules! colorize_bool {
     ($tf:expr) => {
         if $tf {
-            format!("{}", $tf).bright_green().to_string()
+            format!("{:<5}", $tf).bright_green().to_string()
         } else {
-            format!("{}", $tf).red().to_string()
+            format!("{:<5}", $tf).red().to_string()
         };
+    };
+}
+
+#[macro_export]
+#[cfg(feature = "color")]
+macro_rules! underline {
+    ($str:expr) => {
+        $str.underline()
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "color"))]
+macro_rules! underline {
+    ($str:expr) => {
+        $str
     };
 }

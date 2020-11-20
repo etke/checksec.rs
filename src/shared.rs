@@ -14,7 +14,7 @@ pub enum Rpath {
 /// wrapper for Vec<Rpath> to allow easy color output per path entry
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VecRpath {
-    pub paths: Vec<Rpath>,
+    paths: Vec<Rpath>,
 }
 impl VecRpath {
     pub fn new(v: Vec<Rpath>) -> VecRpath {
