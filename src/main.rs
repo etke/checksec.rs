@@ -10,7 +10,9 @@ use goblin::mach::{Mach, MachO};
 use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
-use serde_json::{json, to_string_pretty, Value};
+#[cfg(not(feature = "color"))]
+use serde_json::to_string_pretty;
+use serde_json::{json, Value};
 use sysinfo::{ProcessExt, RefreshKind, System, SystemExt};
 
 use std::path::Path;
@@ -32,11 +34,12 @@ use checksec::underline;
 
 fn json_print(data: &Value, pretty: bool) {
     if pretty {
-        if cfg!(feature = "color") {
-            if let Ok(colored_json) = to_colored_json_auto(data) {
-                println!("{}", colored_json);
-            }
-        } else if let Ok(json_str) = to_string_pretty(data) {
+        #[cfg(feature = "color")]
+        if let Ok(colored_json) = to_colored_json_auto(data) {
+            println!("{}", colored_json);
+        }
+        #[cfg(not(feature = "color"))]
+        if let Ok(json_str) = to_string_pretty(data) {
             println!("{}", json_str);
         }
     } else {
