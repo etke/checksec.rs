@@ -21,8 +21,9 @@ pub enum Relro {
     Partial,
     Full,
 }
-#[cfg(not(feature = "color"))]
+
 impl fmt::Display for Relro {
+    #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -34,9 +35,7 @@ impl fmt::Display for Relro {
             }
         )
     }
-}
-#[cfg(feature = "color")]
-impl fmt::Display for Relro {
+    #[cfg(feature = "color")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -57,8 +56,9 @@ pub enum PIE {
     DSO,
     PIE,
 }
-#[cfg(not(feature = "color"))]
+
 impl fmt::Display for PIE {
+    #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -70,9 +70,7 @@ impl fmt::Display for PIE {
             }
         )
     }
-}
-#[cfg(feature = "color")]
-impl fmt::Display for PIE {
+    #[cfg(feature = "color")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -145,8 +143,9 @@ impl ElfCheckSecResults {
         }
     }
 }
-#[cfg(not(feature = "color"))]
+
 impl fmt::Display for ElfCheckSecResults {
+    #[cfg(not(feature = "color"))]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -165,9 +164,7 @@ impl fmt::Display for ElfCheckSecResults {
             self.runpath
         )
     }
-}
-#[cfg(feature = "color")]
-impl fmt::Display for ElfCheckSecResults {
+    #[cfg(feature = "color")]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

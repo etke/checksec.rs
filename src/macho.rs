@@ -70,8 +70,9 @@ impl MachOCheckSecResults {
         }
     }
 }
-#[cfg(not(feature = "color"))]
+
 impl fmt::Display for MachOCheckSecResults {
+    #[cfg(not(feature = "color"))]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -90,10 +91,7 @@ impl fmt::Display for MachOCheckSecResults {
             self.rpath
         )
     }
-}
-
-#[cfg(feature = "color")]
-impl fmt::Display for MachOCheckSecResults {
+    #[cfg(feature = "color")]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
