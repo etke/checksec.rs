@@ -209,26 +209,30 @@ pub enum ASLR {
     DynamicBase,
     HighEntropyVa,
 }
-#[cfg(not(feature = "color"))]
 impl fmt::Display for ASLR {
+    #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            ASLR::None => write!(f, "None"),
-            ASLR::DynamicBase => write!(f, "DYNBASE"),
-            ASLR::HighEntropyVa => write!(f, "HIGHENTROPYVA"),
-        }
-    }
-}
-#[cfg(feature = "color")]
-impl fmt::Display for ASLR {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            ASLR::None => write!(f, "{}", "None".red()),
-            ASLR::DynamicBase => write!(f, "{}", "DYNBASE".yellow()),
-            ASLR::HighEntropyVa => {
-                write!(f, "{}", "HIGHENTROPYVA".bright_green())
+        write!(
+            f,
+            "{:<13}",
+            match *self {
+                ASLR::None => "None",
+                ASLR::DynamicBase => "DYNBASE",
+                ASLR::HighEntropyVa => "HIGHENTROPYVA",
             }
-        }
+        )
+    }
+    #[cfg(feature = "color")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:<13}",
+            match *self {
+                ASLR::None => "None".red(),
+                ASLR::DynamicBase => "DYNBASE".yellow(),
+                ASLR::HighEntropyVa => "HIGHENTROPYVA".bright_green(),
+            }
+        )
     }
 }
 
@@ -311,8 +315,9 @@ impl PECheckSecResults {
         }
     }
 }
-#[cfg(not(feature = "color"))]
+
 impl fmt::Display for PECheckSecResults {
+    #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -334,9 +339,7 @@ impl fmt::Display for PECheckSecResults {
             self.seh
         )
     }
-}
-#[cfg(feature = "color")]
-impl fmt::Display for PECheckSecResults {
+    #[cfg(feature = "color")]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
