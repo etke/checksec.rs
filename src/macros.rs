@@ -1,5 +1,6 @@
 /// dirty hack to return colorized boolean result as a String
 #[macro_export]
+#[cfg(feature = "color")]
 macro_rules! colorize_bool {
     ($tf:expr) => {
         if $tf {

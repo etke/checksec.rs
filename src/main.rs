@@ -20,6 +20,7 @@ use std::{env, fs, io, process};
 
 #[cfg(feature = "color")]
 use colored::Colorize;
+#[cfg(feature = "color")]
 use colored_json::to_colored_json_auto;
 
 mod binary;
