@@ -1,7 +1,7 @@
 extern crate checksec;
 extern crate goblin;
 
-use checksec::elf::ElfProperties;
+use checksec::elf::Properties;
 use goblin::elf::Elf;
 use std::{env, fs, path::Path};
 
@@ -16,6 +16,6 @@ fn main() {
             }
         }
     } else {
-        println!("Usage: read_elf_canary <binary>");
+        eprintln!("Usage: read_elf_canary <binary>");
     }
 }

@@ -1,6 +1,6 @@
 //! Implements checksec for PE32/32+ binaries
 #[cfg(feature = "color")]
-use colored::*;
+use colored::Colorize;
 use goblin::pe::utils::get_data;
 use goblin::pe::PE;
 use memmap::Mmap;
@@ -19,12 +19,12 @@ const IMAGE_DLLCHARACTERISTICS_NO_ISOLATION: u16 = 0x0200;
 const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 const IMAGE_DLLCHARACTERISTICS_GUARD_CF: u16 = 0x4000;
 
-// stored in IMAGE_LOAD_CONFIG_DIRECTORY64
+// stored in `IMAGE_LOAD_CONFIG_DIRECTORY64`
 const IMAGE_GUARD_RF_INSTRUMENTED: u32 = 0x0002_0000;
 const IMAGE_GUARD_RF_ENABLE: u32 = 0x0004_0000;
 const IMAGE_GUARD_RF_STRICT: u32 = 0x0008_0000;
 
-/// IMAGE_LOAD_CONFIG_CODE_INTEGRITY
+/// `IMAGE_LOAD_CONFIG_CODE_INTEGRITY`
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pread)]
 struct ImageLoadConfigCodeIntegrity {
@@ -33,8 +33,8 @@ struct ImageLoadConfigCodeIntegrity {
     catalogoffset: u32,
     reserved: u32,
 }
-/// IMAGE_LOAD_CONFIG_DIRECTORY32
-/// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory32
+/// [`IMAGE_LOAD_CONFIG_DIRECTORY32`](https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory32)
+#[allow(clippy::cast_lossless)]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pread)]
 struct ImageLoadConfigDirectory32 {
@@ -82,8 +82,8 @@ struct ImageLoadConfigDirectory32 {
     volatiile_metadata_pointer: u32,
 }
 
-/// IMAGE_LOAD_CONFIG_DIRECTORY64
-/// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory64
+/// [`IMAGE_LOAD_CONFIG_DIRECTORY64`](https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory64)
+#[allow(clippy::cast_lossless)]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pread)]
 struct ImageLoadConfigDirectory64 {
@@ -131,11 +131,12 @@ struct ImageLoadConfigDirectory64 {
     volatiile_metadata_pointer: u64,
 }
 
-/// Unified 32/64-bit IMAGE_LOAD_CONFIG_DIRECTORY fields
+/// Unified 32/64-bit `IMAGE_LOAD_CONFIG_DIRECTORY` fields
 type ImageLoadConfigDirectory = ImageLoadConfigDirectory64;
 impl From<ImageLoadConfigDirectory32> for ImageLoadConfigDirectory {
     fn from(cfg: ImageLoadConfigDirectory32) -> Self {
-        ImageLoadConfigDirectory {
+        #[allow(clippy::cast_lossless)]
+        Self {
             size: cfg.size,
             time_date_stamp: cfg.time_date_stamp,
             major_version: cfg.major_version,
@@ -216,9 +217,9 @@ impl fmt::Display for ASLR {
             f,
             "{:<13}",
             match *self {
-                ASLR::None => "None",
-                ASLR::DynamicBase => "DYNBASE",
-                ASLR::HighEntropyVa => "HIGHENTROPYVA",
+                Self::None => "None",
+                Self::DynamicBase => "DYNBASE",
+                Self::HighEntropyVa => "HIGHENTROPYVA",
             }
         )
     }
@@ -228,9 +229,9 @@ impl fmt::Display for ASLR {
             f,
             "{:<13}",
             match *self {
-                ASLR::None => "None".red(),
-                ASLR::DynamicBase => "DYNBASE".yellow(),
-                ASLR::HighEntropyVa => "HIGHENTROPYVA".bright_green(),
+                Self::None => "None".red(),
+                Self::DynamicBase => "DYNBASE".yellow(),
+                Self::HighEntropyVa => "HIGHENTROPYVA".bright_green(),
             }
         )
     }
@@ -241,7 +242,7 @@ impl fmt::Display for ASLR {
 /// **Example**
 ///
 /// ```rust
-/// use checksec::pe::PEProperties;
+/// use checksec::pe::Properties;
 /// use goblin::pe::PE;
 /// use memmap::Mmap;
 /// use std::fs;
@@ -253,7 +254,7 @@ impl fmt::Display for ASLR {
 ///                 match obj {
 ///                     Object::PE(pe) => println!(
 ///                         "{:#?}",
-///                         PECheckSecResults::parse(&pe, &buf)
+///                         CheckSecResults::parse(&pe, &buf)
 ///                     ),
 ///                     _ => println!("Not an pe binary."),
 ///                 }
@@ -267,8 +268,9 @@ impl fmt::Display for ASLR {
 /// access to the underlying binary file to parse, so both the goblin
 /// object and a read-only memory-mapped version of the original file
 /// must be provided for evaluating PE32/32+ binaries.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize)]
-pub struct PECheckSecResults {
+pub struct CheckSecResults {
     /// Address Space Layout Randomization
     pub aslr: ASLR,
     /// Authenticode
@@ -296,9 +298,10 @@ pub struct PECheckSecResults {
     /// Structured Exception Handler
     pub seh: bool,
 }
-impl PECheckSecResults {
-    pub fn parse(pe: &PE, buffer: &Mmap) -> PECheckSecResults {
-        PECheckSecResults {
+impl CheckSecResults {
+    #[must_use]
+    pub fn parse(pe: &PE, buffer: &Mmap) -> Self {
+        Self {
             aslr: pe.has_aslr(),
             authenticode: pe.has_authenticode(buffer),
             cfg: pe.has_cfg(),
@@ -316,7 +319,7 @@ impl PECheckSecResults {
     }
 }
 
-impl fmt::Display for PECheckSecResults {
+impl fmt::Display for CheckSecResults {
     #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -377,12 +380,12 @@ impl fmt::Display for PECheckSecResults {
 }
 
 /// checksec Trait implementation for
-/// [goblin::pe::PE](https://docs.rs/goblin/latest/goblin/pe/struct.PE.html)
+/// [`goblin::pe::PE`](https://docs.rs/goblin/latest/goblin/pe/struct.PE.html)
 ///
 /// **Example**
 ///
 /// ```rust
-/// use checksec::pe::PEProperties;
+/// use checksec::pe::Properties;
 /// use goblin::pe::PE;
 /// use memmap::Mmap;
 /// use std::fs;
@@ -403,7 +406,7 @@ impl fmt::Display for PECheckSecResults {
 /// access to the underlying binary file, so both the goblin object and a
 /// read-only memory-mapped version of the original file must be provided
 /// for check functions that require it.
-pub trait PEProperties {
+pub trait Properties {
     /// check for both `IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE` *(0x0040)* and
     /// `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(0x0020)* in
     /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
@@ -413,7 +416,7 @@ pub trait PEProperties {
     /// `IMAGE_OPTIONAL_HEADER32/64`
     ///
     /// requires a
-    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// [`memmap::Mmap`](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
     /// of the original file to read & parse required information from the
     /// underlying binary file
     fn has_authenticode(&self, mem: &memmap::Mmap) -> bool;
@@ -437,23 +440,23 @@ pub trait PEProperties {
     /// `IMAGE_OPTIONAL_HEADER32/64`
     ///
     /// requires a
-    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// [`memmap::Mmap`](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
     /// of the original file to read & parse required information from the
     /// underlying binary file
     fn has_gs(&self, mem: &memmap::Mmap) -> bool;
-    /// check for `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(0x0020)* in
+    /// check for `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(`0x0020`)* in
     /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_high_entropy_va(&self) -> bool;
     /// check for `IMAGE_DLLCHARACTERISTICS_NO_ISOLATION` *(0x0200)* in
     /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_isolation(&self) -> bool;
     /// check `guard_flags` for `IMAGE_GUARD_RF_INSTRUMENTED` *(0x00020000)*
-    /// along with `IMAGE_GUARD_RF_ENABLE` *(0x00040000)* or
-    /// IMAGE_GUARD_RF_STRICT *(0x0008_0000)* in `IMAGE_DATA_DIRECTORY`
+    /// along with `IMAGE_GUARD_RF_ENABLE` *(`0x00040000`)* or
+    /// `IMAGE_GUARD_RF_STRICT` *(`0x0008_0000`)* in `IMAGE_DATA_DIRECTORY`
     /// from the `IMAGE_OPTIONAL_HEADER32/64`
     ///
     /// requires a
-    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// [`memmap::Mmap`](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
     /// of the original file to read & parse required information from the
     /// underlying binary file
     fn has_rfg(&self, mem: &memmap::Mmap) -> bool;
@@ -461,15 +464,15 @@ pub trait PEProperties {
     /// linked from the the `IMAGE_OPTIONAL_HEADER32/64`
     ///
     /// requires a
-    /// [memmap::Mmap](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+    /// [`memmap::Mmap`](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
     /// of the original file to read and parse required information from the
     /// underlying binary file
     fn has_safe_seh(&self, mem: &memmap::Mmap) -> bool;
-    /// check IMAGE_DLLCHARACTERISTICS_NO_SEH from the
-    /// IMAGE_OPTIONAL_HEADER32/64
+    /// check `IMAGE_DLLCHARACTERISTICS_NO_SEH` from the
+    /// `IMAGE_OPTIONAL_HEADER32/64`
     fn has_seh(&self) -> bool;
 }
-impl PEProperties for PE<'_> {
+impl Properties for PE<'_> {
     fn has_aslr(&self) -> ASLR {
         if self.has_dynamic_base() & self.has_high_entropy_va() {
             return ASLR::HighEntropyVa;
@@ -630,6 +633,7 @@ impl PEProperties for PE<'_> {
         false
     }
     fn has_seh(&self) -> bool {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match self.header.optional_header {
             Some(optional_header) => {
                 let dllcharacteristics: u16 =

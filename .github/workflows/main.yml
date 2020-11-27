@@ -55,15 +55,15 @@ jobs:
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
     - name: rustfmt
       shell: bash
-      if: startsWith(runner.os, 'Linux') && matrix.rust == 'stable'
+      if: matrix.rust == 'stable'
       run: |
         rustup component add rustfmt
         cargo fmt -- --check
     - name: clippy
       shell: bash
-      if: startsWith(runner.os, 'Linux') && matrix.rust == 'stable'
+      if: matrix.rust == 'stable'
       run: |
         rustup component add clippy
-        cargo clippy
+        cargo clippy --all -- -D clippy::all -D clippy::pedantic
     - run: cargo build
     - run: cargo build --all-targets

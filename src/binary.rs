@@ -1,11 +1,11 @@
 #[cfg(feature = "color")]
-use colored::*;
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use checksec::elf::ElfCheckSecResults;
-use checksec::macho::MachOCheckSecResults;
-use checksec::pe::PECheckSecResults;
+use checksec::elf;
+use checksec::macho;
+use checksec::pe;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub enum BinType {
@@ -20,12 +20,12 @@ pub enum BinType {
 impl fmt::Display for BinType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            BinType::Elf32 => write!(f, "ELF32"),
-            BinType::Elf64 => write!(f, "ELF64"),
-            BinType::PE32 => write!(f, "PE32"),
-            BinType::PE64 => write!(f, "PE64"),
-            BinType::MachO32 => write!(f, "MachO32"),
-            BinType::MachO64 => write!(f, "MachO64"),
+            Self::Elf32 => write!(f, "ELF32"),
+            Self::Elf64 => write!(f, "ELF64"),
+            Self::PE32 => write!(f, "PE32"),
+            Self::PE64 => write!(f, "PE64"),
+            Self::MachO32 => write!(f, "MachO32"),
+            Self::MachO64 => write!(f, "MachO64"),
         }
     }
 }
@@ -33,28 +33,28 @@ impl fmt::Display for BinType {
 impl fmt::Display for BinType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            BinType::Elf32 => write!(f, "{}", "ELF32".bold().underline()),
-            BinType::Elf64 => write!(f, "{}", "ELF64".bold().underline()),
-            BinType::PE32 => write!(f, "{}", "PE32".bold().underline()),
-            BinType::PE64 => write!(f, "{}", "PE64".bold().underline()),
-            BinType::MachO32 => write!(f, "{}", "MachO32".bold().underline()),
-            BinType::MachO64 => write!(f, "{}", "MachO64".bold().underline()),
+            Self::Elf32 => write!(f, "{}", "ELF32".bold().underline()),
+            Self::Elf64 => write!(f, "{}", "ELF64".bold().underline()),
+            Self::PE32 => write!(f, "{}", "PE32".bold().underline()),
+            Self::PE64 => write!(f, "{}", "PE64".bold().underline()),
+            Self::MachO32 => write!(f, "{}", "MachO32".bold().underline()),
+            Self::MachO64 => write!(f, "{}", "MachO64".bold().underline()),
         }
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum BinSpecificProperties {
-    Elf(ElfCheckSecResults),
-    PE(PECheckSecResults),
-    MachO(MachOCheckSecResults),
+    Elf(elf::CheckSecResults),
+    PE(pe::CheckSecResults),
+    MachO(macho::CheckSecResults),
 }
 impl fmt::Display for BinSpecificProperties {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &*self {
-            BinSpecificProperties::Elf(b) => write!(f, "{}", b),
-            BinSpecificProperties::PE(b) => write!(f, "{}", b),
-            BinSpecificProperties::MachO(b) => write!(f, "{}", b),
+            Self::Elf(b) => write!(f, "{}", b),
+            Self::PE(b) => write!(f, "{}", b),
+            Self::MachO(b) => write!(f, "{}", b),
         }
     }
 }
@@ -89,12 +89,12 @@ impl fmt::Display for Binary {
     }
 }
 impl Binary {
-    pub fn new(
+    pub const fn new(
         binarytype: BinType,
         file: String,
         properties: BinSpecificProperties,
-    ) -> Binary {
-        Binary { binarytype, file, properties }
+    ) -> Self {
+        Self { binarytype, file, properties }
     }
 }
 
@@ -103,8 +103,8 @@ pub struct Binaries {
     pub binaries: Vec<Binary>,
 }
 impl Binaries {
-    pub fn new(binaries: Vec<Binary>) -> Binaries {
-        Binaries { binaries }
+    pub fn new(binaries: Vec<Binary>) -> Self {
+        Self { binaries }
     }
 }
 
@@ -114,8 +114,8 @@ pub struct Process {
     pub binary: Vec<Binary>,
 }
 impl Process {
-    pub fn new(pid: usize, binary: Vec<Binary>) -> Process {
-        Process { pid, binary }
+    pub fn new(pid: usize, binary: Vec<Binary>) -> Self {
+        Self { pid, binary }
     }
 }
 
@@ -124,7 +124,7 @@ pub struct Processes {
     pub processes: Vec<Process>,
 }
 impl Processes {
-    pub fn new(processes: Vec<Process>) -> Processes {
-        Processes { processes }
+    pub fn new(processes: Vec<Process>) -> Self {
+        Self { processes }
     }
 }

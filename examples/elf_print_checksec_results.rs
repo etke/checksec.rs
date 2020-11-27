@@ -1,7 +1,7 @@
 extern crate checksec;
 extern crate goblin;
 
-use checksec::elf::ElfCheckSecResults;
+use checksec::elf::CheckSecResults;
 use goblin::Object;
 use std::{env, fs};
 
@@ -12,13 +12,13 @@ fn main() {
             if let Ok(buf) = fs::read(&argv[1]) {
                 match Object::parse(&buf).unwrap() {
                     Object::Elf(elf) => {
-                        println!("{:#?}", ElfCheckSecResults::parse(&elf))
+                        println!("{:#?}", CheckSecResults::parse(&elf))
                     }
                     _ => println!("Not an elf binary."),
                 }
             }
         }
     } else {
-        println!("Usage: elf_print_checksec_results <binary>");
+        eprintln!("Usage: elf_print_checksec_results <binary>");
     }
 }

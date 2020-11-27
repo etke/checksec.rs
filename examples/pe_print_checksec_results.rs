@@ -2,7 +2,7 @@ extern crate checksec;
 extern crate goblin;
 extern crate memmap;
 
-use checksec::pe::PECheckSecResults;
+use checksec::pe::CheckSecResults;
 use goblin::Object;
 use memmap::Mmap;
 use std::{env, fs};
@@ -16,7 +16,7 @@ fn main() {
                     match obj {
                         Object::PE(pe) => println!(
                             "{:#?}",
-                            PECheckSecResults::parse(&pe, &buf)
+                            CheckSecResults::parse(&pe, &buf)
                         ),
                         _ => println!("Not an pe binary."),
                     }
@@ -24,6 +24,6 @@ fn main() {
             }
         }
     } else {
-        println!("Usage: pe_print_checksec_results <binary>");
+        eprintln!("Usage: pe_print_checksec_results <binary>");
     }
 }

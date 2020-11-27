@@ -2,7 +2,7 @@ extern crate checksec;
 extern crate goblin;
 extern crate memmap;
 
-use checksec::pe::PEProperties;
+use checksec::pe::Properties;
 use goblin::pe::PE;
 use memmap::Mmap;
 use std::{env, fs};

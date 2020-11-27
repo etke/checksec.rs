@@ -1,6 +1,6 @@
 //! Implements checksec for ELF binaries
 #[cfg(feature = "color")]
-use colored::*;
+use colored::Colorize;
 use goblin::elf::dynamic::{
     DF_1_NOW, DF_1_PIE, DF_BIND_NOW, DT_RPATH, DT_RUNPATH,
 };
@@ -29,9 +29,9 @@ impl fmt::Display for Relro {
             f,
             "{:<7}",
             match *self {
-                Relro::None => "None",
-                Relro::Partial => "Partial",
-                Relro::Full => "Full",
+                Self::None => "None",
+                Self::Partial => "Partial",
+                Self::Full => "Full",
             }
         )
     }
@@ -41,9 +41,9 @@ impl fmt::Display for Relro {
             f,
             "{:<7}",
             match *self {
-                Relro::None => "None".red(),
-                Relro::Partial => "Partial".yellow(),
-                Relro::Full => "Full".green(),
+                Self::None => "None".red(),
+                Self::Partial => "Partial".yellow(),
+                Self::Full => "Full".green(),
             }
         )
     }
@@ -64,9 +64,9 @@ impl fmt::Display for PIE {
             f,
             "{:<4}",
             match *self {
-                PIE::None => "None",
-                PIE::DSO => "DSO",
-                PIE::PIE => "Full",
+                Self::None => "None",
+                Self::DSO => "DSO",
+                Self::PIE => "Full",
             }
         )
     }
@@ -76,9 +76,9 @@ impl fmt::Display for PIE {
             f,
             "{:<4}",
             match *self {
-                PIE::None => "None".red(),
-                PIE::DSO => "DSO".yellow(),
-                PIE::PIE => "Full".green(),
+                Self::None => "None".red(),
+                Self::DSO => "DSO".yellow(),
+                Self::PIE => "Full".green(),
             }
         )
     }
@@ -89,7 +89,7 @@ impl fmt::Display for PIE {
 /// **Example**
 ///
 /// ```rust
-/// use checksec::elf::ElfCheckSecResults;
+/// use checksec::elf::CheckSecResults;
 /// use goblin::elf::Elf;
 /// use std::fs;
 ///
@@ -103,8 +103,9 @@ impl fmt::Display for PIE {
 ///     }
 /// }
 /// ```
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize)]
-pub struct ElfCheckSecResults {
+pub struct CheckSecResults {
     /// Stack Canary (*CFLAGS=*`-fstack-protector*`)
     pub canary: bool,
     /// Clang Control Flow Integrity (*CFLAGS=*`-fsanitize=cfi-*`)
@@ -127,9 +128,10 @@ pub struct ElfCheckSecResults {
     /// Run-time search path (`DT_RUNTIME`)
     pub runpath: VecRpath,
 }
-impl ElfCheckSecResults {
-    pub fn parse(elf: &Elf) -> ElfCheckSecResults {
-        ElfCheckSecResults {
+impl CheckSecResults {
+    #[must_use]
+    pub fn parse(elf: &Elf) -> Self {
+        Self {
             canary: elf.has_canary(),
             clang_cfi: elf.has_clang_cfi(),
             clang_safestack: elf.has_clang_safestack(),
@@ -144,7 +146,7 @@ impl ElfCheckSecResults {
     }
 }
 
-impl fmt::Display for ElfCheckSecResults {
+impl fmt::Display for CheckSecResults {
     #[cfg(not(feature = "color"))]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -195,12 +197,12 @@ impl fmt::Display for ElfCheckSecResults {
 }
 
 /// checksec Trait implementation for
-/// [goblin::elf::Elf](https://docs.rs/goblin/latest/goblin/elf/struct.Elf.html)
+/// [`goblin::elf::Elf`](https://docs.rs/goblin/latest/goblin/elf/struct.Elf.html)
 ///
 /// **Example**
 ///
 /// ```rust
-/// use checksec::elf::ElfProperties;
+/// use checksec::elf::Properties;
 /// use goblin::elf::Elf;
 /// use std::fs;
 ///
@@ -214,7 +216,7 @@ impl fmt::Display for ElfCheckSecResults {
 ///     }
 /// }
 /// ```
-pub trait ElfProperties {
+pub trait Properties {
     /// check for `__stack_chk_fail` or `__intel_security_cookie` in dynstrtab
     fn has_canary(&self) -> bool;
     /// check for symbols containing `.cfi` in dynstrtab
@@ -235,23 +237,24 @@ pub trait ElfProperties {
     /// `PT_GNU_RELRO ELF` program header
     fn has_relro(&self) -> Relro;
     /// check the`.dynamic` section for `DT_RUNPATH` and return results in a
-    /// VecRpath
+    /// `VecRpath`
     fn has_rpath(&self) -> VecRpath;
     /// check the `.dynamic` section for `DT_RPATH` and return results in a
-    /// VecRpath
+    /// `VecRpath`
     fn has_runpath(&self) -> VecRpath;
     /// return the corresponding string from dynstrtab for a given `d_tag`
     fn get_dynstr_by_tag(&self, tag: u64) -> Option<String>;
 }
 
-impl ElfProperties for Elf<'_> {
+impl Properties for Elf<'_> {
     fn has_canary(&self) -> bool {
         for sym in &self.dynsyms {
             if let Some(name) = self.dynstrtab.get(sym.st_name) {
                 if let Ok(name) = name {
                     match name {
-                        "__stack_chk_fail" => return true,
-                        "__intel_security_cookie" => return true,
+                        "__stack_chk_fail" | "__intel_security_cookie" => {
+                            return true
+                        }
                         _ => continue,
                     }
                 }
@@ -378,6 +381,7 @@ impl ElfProperties for Elf<'_> {
         if let Some(dynamic) = &self.dynamic {
             for dynamic in &dynamic.dyns {
                 if dynamic.d_tag == tag {
+                    #[allow(clippy::clippy::cast_possible_truncation)]
                     if let Some(name) =
                         self.dynstrtab.get(dynamic.d_val as usize)
                     {

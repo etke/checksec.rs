@@ -28,9 +28,9 @@ mod binary;
 use binary::{
     BinSpecificProperties, BinType, Binaries, Binary, Process, Processes,
 };
-use checksec::elf::ElfCheckSecResults;
-use checksec::macho::MachOCheckSecResults;
-use checksec::pe::PECheckSecResults;
+use checksec::elf;
+use checksec::macho;
+use checksec::pe;
 use checksec::underline;
 
 fn json_print(data: &Value, pretty: bool) {
@@ -56,8 +56,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     if let Ok(buffer) = unsafe { Mmap::map(&fp.unwrap()) } {
         match Object::parse(&buffer)? {
             Object::Elf(elf) => {
-                let results: ElfCheckSecResults =
-                    ElfCheckSecResults::parse(&elf);
+                let results = elf::CheckSecResults::parse(&elf);
                 let bin_type =
                     if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
                 return Ok(vec![Binary::new(
@@ -67,7 +66,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
                 )]);
             }
             Object::PE(pe) => {
-                let results = PECheckSecResults::parse(&pe, &buffer);
+                let results = pe::CheckSecResults::parse(&pe, &buffer);
                 let bin_type =
                     if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
                 return Ok(vec![Binary::new(
@@ -78,7 +77,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
             }
             Object::Mach(mach) => match mach {
                 Mach::Binary(macho) => {
-                    let results = MachOCheckSecResults::parse(&macho);
+                    let results = macho::CheckSecResults::parse(&macho);
                     let bin_type = if macho.is_64 {
                         BinType::MachO64
                     } else {
@@ -94,7 +93,8 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
                     let mut fat_bins: Vec<Binary> = Vec::new();
                     for (idx, _) in fatmach.iter_arches().enumerate() {
                         let container: MachO = fatmach.get(idx).unwrap();
-                        let results = MachOCheckSecResults::parse(&container);
+                        let results =
+                            macho::CheckSecResults::parse(&container);
                         let bin_type = if container.is_64 {
                             BinType::MachO64
                         } else {
@@ -125,7 +125,7 @@ fn walk(basepath: &Path, json: bool, pretty: bool) {
                         if json {
                             bins.append(&mut result);
                         } else {
-                            for bin in result.iter() {
+                            for bin in &result {
                                 println!("{}", bin);
                             }
                         }
@@ -138,7 +138,7 @@ fn walk(basepath: &Path, json: bool, pretty: bool) {
         json_print(&json!(Binaries::new(bins)), pretty);
     }
 }
-
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
     let args = App::new("checksec")
         .about(crate_description!())
@@ -233,14 +233,15 @@ fn main() {
         for (pid, proc_entry) in system.get_processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
                 if json {
+                    #[allow(clippy::cast_sign_loss)]
                     procs.append(&mut vec![Process::new(
                         *pid as usize,
                         results,
                     )])
                 } else {
-                    for result in results.iter() {
+                    for result in &results {
                         println!(
-                            "{}({})\n ↪ {}",
+                            "{}({})\n \u{21aa} {}",
                             proc_entry.name(),
                             pid,
                             result
@@ -267,12 +268,11 @@ fn main() {
             System::new_with_specifics(RefreshKind::new().with_processes());
 
         for procid in procids {
-            let process = match system.get_process(procid) {
-                Some(process) => process,
-                None => {
-                    eprintln!("No process found with ID {}", procid);
-                    continue;
-                }
+            let process = if let Some(process) = system.get_process(procid) {
+                process
+            } else {
+                eprintln!("No process found with ID {}", procid);
+                continue;
             };
 
             if !process.exe().is_file() {
@@ -285,17 +285,18 @@ fn main() {
                 continue;
             }
 
-            match parse(&process.exe()) {
+            match parse(process.exe()) {
                 Ok(results) => {
                     if json {
+                        #[allow(clippy::cast_sign_loss)]
                         json_print(
                             &json!(Process::new(procid as usize, results)),
                             pretty,
                         );
                     } else {
-                        for result in results.iter() {
+                        for result in &results {
                             println!(
-                                "{}({})\n ↪ {}",
+                                "{}({})\n \u{21aa} {}",
                                 process.name(),
                                 process.pid(),
                                 result
@@ -324,16 +325,17 @@ fn main() {
         }
         let mut procs: Vec<Process> = Vec::new();
         for proc_entry in &sysprocs {
-            if let Ok(results) = parse(&proc_entry.exe()) {
+            if let Ok(results) = parse(proc_entry.exe()) {
                 if json {
+                    #[allow(clippy::cast_sign_loss)]
                     procs.append(&mut vec![Process::new(
                         proc_entry.pid() as usize,
                         results,
                     )])
                 } else {
-                    for result in results.iter() {
+                    for result in &results {
                         println!(
-                            "{}({})\n ↪ {}",
+                            "{}({})\n \u{21aa} {}",
                             proc_entry.name(),
                             proc_entry.pid(),
                             result
@@ -367,7 +369,7 @@ fn main() {
                 if json {
                     json_print(&json!(Binaries::new(results)), pretty);
                 } else {
-                    for result in results.iter() {
+                    for result in &results {
                         println!("{}", result);
                     }
                 }

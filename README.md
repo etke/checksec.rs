@@ -114,13 +114,13 @@ Add `checksec` crate dependency to your project `Cargo.toml`.
 checksec = { version = "0.0.8", features = ["elf", "macho", "pe", "color"] }
 ```
 
-Now in your project source, specify dependency on the `checksec` crate and import the `*Properties` trait(s).
+Now in your project source, specify dependency on the `checksec` crate and import the required module to access the associated `Properties` trait(s).
 
 ```rust
 extern crate checksec;
-use checksec::elf::ElfProperties;
-use checksec::macho::MachOProperties;
-use checksec::pe::PEProperties;
+use checksec::elf;
+use checksec::macho;
+use checksec::pe;
 ```
 
 You will now have access to all the implemented check functions directly from the `goblin::Object`.

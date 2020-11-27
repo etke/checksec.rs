@@ -1,6 +1,6 @@
-//! Implements checksec for MachO binaries
+//! Implements checksec for `MachO` binaries
 #[cfg(feature = "color")]
-use colored::*;
+use colored::Colorize;
 use goblin::mach::load_command::CommandVariant;
 use goblin::mach::MachO;
 use serde::{Deserialize, Serialize};
@@ -14,12 +14,12 @@ const MH_ALLOW_STACK_EXECUTION: u32 = 0x0002_0000;
 const MH_PIE: u32 = 0x0020_0000;
 const MH_NO_HEAP_EXECUTION: u32 = 0x0100_0000;
 
-/// Checksec result struct for MachO32/64 binaries
+/// Checksec result struct for `MachO32/64` binaries
 ///
 /// **Example**
 ///
 /// ```rust
-/// use checksec::macho::MachOCheckSecResults;
+/// use checksec::macho::CheckSecResults;
 /// use goblin::mach::MachO;
 /// use std::fs;
 ///
@@ -27,27 +27,28 @@ const MH_NO_HEAP_EXECUTION: u32 = 0x0100_0000;
 ///     if let Ok(fp) = fs::File::open(&binary) {
 ///         if let Ok(buf) = fs::read(fp) {
 ///             if let Ok(macho) = MachO::parse(&buf) {
-///                 println!("{:#?}", MachOCheckSecResults::parse(&macho));
+///                 println!("{:#?}", CheckSecResults::parse(&macho));
 ///             }
 ///         }
 ///     }
 /// }
 /// ```
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize)]
-pub struct MachOCheckSecResults {
+pub struct CheckSecResults {
     /// Automatic Reference Counting
     pub arc: bool,
     /// Stack Canary
     pub canary: bool,
     /// Code Signature (codesign)
     pub code_signature: bool,
-    /// Encrypted (LC_ENCRYPTION_INFO/LC_ENCRYPTION_INFO_64)
+    /// Encrypted (`LC_ENCRYPTION_INFO`/`LC_ENCRYPTION_INFO_64`)
     pub encrypted: bool,
-    /// Non-Executable Heap (MH_NO_HEAP_EXECUTION)
+    /// Non-Executable Heap (`MH_NO_HEAP_EXECUTION`)
     pub nx_heap: bool,
-    /// Non-Executable Stack (MH_ALLOW_STACK_EXECUTION)
+    /// Non-Executable Stack (`MH_ALLOW_STACK_EXECUTION`)
     pub nx_stack: bool,
-    /// Position Independent Executable (MH_PIE)
+    /// Position Independent Executable (`MH_PIE`)
     pub pie: bool,
     /// Restrict segment
     pub restrict: bool,
@@ -55,9 +56,10 @@ pub struct MachOCheckSecResults {
     //rpath: VecRpath,
     pub rpath: bool,
 }
-impl MachOCheckSecResults {
-    pub fn parse(macho: &MachO) -> MachOCheckSecResults {
-        MachOCheckSecResults {
+impl CheckSecResults {
+    #[must_use]
+    pub fn parse(macho: &MachO) -> Self {
+        Self {
             arc: macho.has_arc(),
             canary: macho.has_canary(),
             code_signature: macho.has_code_signature(),
@@ -71,7 +73,7 @@ impl MachOCheckSecResults {
     }
 }
 
-impl fmt::Display for MachOCheckSecResults {
+impl fmt::Display for CheckSecResults {
     #[cfg(not(feature = "color"))]
     /// Colorized human readable format output
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -121,7 +123,7 @@ impl fmt::Display for MachOCheckSecResults {
 }
 
 /// checksec Trait implementation for
-/// [goblin::mach::MachO](https://docs.rs/goblin/latest/goblin/mach/struct.MachO.html)
+/// [`goblin::mach::MachO`](https://docs.rs/goblin/latest/goblin/mach/struct.MachO.html)
 ///
 /// **Example**
 ///
@@ -150,22 +152,22 @@ pub trait MachOProperties {
     /// check if `cryptid` has a value set for EncryptionInfo32/64 in load
     /// commands
     fn has_encrypted(&self) -> bool;
-    /// check `MH_NO_HEAP_EXECUTION` *(0x01000000)* in MachO header flags
+    /// check `MH_NO_HEAP_EXECUTION` *(0x01000000)* in `MachO` header flags
     fn has_nx_heap(&self) -> bool;
-    /// check `MH_ALLOW_STACK_EXECUTION` *(0x00020000)* in MachO header flags
+    /// check `MH_ALLOW_STACK_EXECUTION` *(0x00020000)* in `MachO` header flags
     fn has_nx_stack(&self) -> bool;
-    /// check `MH_PIE` *(0x00200000)* in MachO header flags
+    /// check `MH_PIE` *(0x00200000)* in `MachO` header flags
     fn has_pie(&self) -> bool;
     /// check for `___restrict` segment name
     fn has_restrict(&self) -> bool;
     //fn has_rpath(&self) -> VecRpath;
-    /// check for RPath in load commands
+    /// check for `RPath` in load commands
     fn has_rpath(&self) -> bool;
 }
 impl MachOProperties for MachO<'_> {
     fn has_arc(&self) -> bool {
         if let Ok(imports) = self.imports() {
-            for import in imports.iter() {
+            for import in &imports {
                 if import.name == "_objc_release" {
                     return true;
                 }
@@ -175,10 +177,9 @@ impl MachOProperties for MachO<'_> {
     }
     fn has_canary(&self) -> bool {
         if let Ok(imports) = self.imports() {
-            for import in imports.iter() {
+            for import in &imports {
                 match import.name {
-                    "___stack_chk_fail" => return true,
-                    "___stack_chk_guard" => return true,
+                    "___stack_chk_fail" | "___stack_chk_guard" => return true,
                     _ => continue,
                 }
             }
@@ -186,7 +187,7 @@ impl MachOProperties for MachO<'_> {
         false
     }
     fn has_code_signature(&self) -> bool {
-        for loadcmd in self.load_commands.iter() {
+        for loadcmd in &self.load_commands {
             if let CommandVariant::CodeSignature(cmd) = loadcmd.command {
                 // just check for existence, todo full validation
                 if cmd.datasize > 0 {
@@ -197,7 +198,7 @@ impl MachOProperties for MachO<'_> {
         false
     }
     fn has_encrypted(&self) -> bool {
-        for loadcmd in self.load_commands.iter() {
+        for loadcmd in &self.load_commands {
             match loadcmd.command {
                 CommandVariant::EncryptionInfo32(cmd) => {
                     if cmd.cryptid != 0 {
@@ -224,7 +225,7 @@ impl MachOProperties for MachO<'_> {
         matches!(self.header.flags & MH_PIE, x if x != 0)
     }
     fn has_restrict(&self) -> bool {
-        for segment in self.segments.iter() {
+        for segment in &self.segments {
             if let Ok(name) = segment.name() {
                 if name.to_string().to_lowercase() == "__restrict" {
                     return true;
@@ -238,7 +239,7 @@ impl MachOProperties for MachO<'_> {
         // simply check for existence of @rpath command for now
         // parse out rpath entries similar to elf later
         // paths separated by `;` instead of `:` like the elf counterpart
-        for loadcmd in self.load_commands.iter() {
+        for loadcmd in &self.load_commands {
             if let CommandVariant::Rpath(_) = loadcmd.command {
                 return true;
                 //return VecRpath::new(vec![Rpath::Yes("true".to_string())]);

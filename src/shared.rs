@@ -1,10 +1,10 @@
 //! Implements shared functionalities between elf/macho modules
 #[cfg(feature = "color")]
-use colored::*;
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Split contents of DT_RPATH/DT_RUNPATH or @rpath entries
+/// Split contents of `DT_RPATH`/`DT_RUNPATH` or @rpath entries
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Rpath {
     None,
@@ -17,8 +17,9 @@ pub struct VecRpath {
     paths: Vec<Rpath>,
 }
 impl VecRpath {
-    pub fn new(v: Vec<Rpath>) -> VecRpath {
-        VecRpath { paths: v }
+    #[must_use]
+    pub fn new(v: Vec<Rpath>) -> Self {
+        Self { paths: v }
     }
 }
 #[cfg(not(feature = "color"))]
@@ -42,8 +43,7 @@ impl fmt::Display for VecRpath {
         let mut s: Vec<String> = Vec::<String>::new();
         for v in &self.paths {
             match v {
-                Rpath::Yes(p) => s.push(p.red().to_string()),
-                Rpath::YesRW(p) => s.push(p.red().to_string()),
+                Rpath::Yes(p) | Rpath::YesRW(p) => s.push(p.red().to_string()),
                 Rpath::None => s.push("None".green().to_string()),
             }
         }

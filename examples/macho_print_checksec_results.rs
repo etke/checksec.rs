@@ -1,7 +1,7 @@
 extern crate checksec;
 extern crate goblin;
 
-use checksec::macho::MachOCheckSecResults;
+use checksec::macho::CheckSecResults;
 use goblin::mach::{Mach, MachO};
 use goblin::Object;
 use std::{env, fs};
@@ -17,7 +17,7 @@ fn main() {
                             Mach::Binary(macho) => {
                                 println!(
                                     "{:#?}",
-                                    MachOCheckSecResults::parse(&macho)
+                                    CheckSecResults::parse(&macho)
                                 );
                             }
                             Mach::Fat(fatmach) => {
@@ -28,18 +28,16 @@ fn main() {
                                         fatmach.get(idx).unwrap();
                                     println!(
                                         "{:#?}",
-                                        MachOCheckSecResults::parse(
-                                            &container
-                                        )
+                                        CheckSecResults::parse(&container)
                                     );
                                 }
                             }
                         },
-                        _ => println!("not a mach binary"),
+                        _ => eprintln!("not a mach binary"),
                     }
                 }
             }
         }
-        _ => println!("Usage: macho_print_checksec_results <binary>"),
+        _ => eprintln!("Usage: macho_print_checksec_results <binary>"),
     }
 }
