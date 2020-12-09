@@ -6,6 +6,7 @@ extern crate sysinfo;
 
 use clap::{crate_authors, crate_description, crate_version, App, Arg};
 use goblin::error::Error;
+#[cfg(feature = "macho")]
 use goblin::mach::{Mach, MachO};
 use goblin::Object;
 use ignore::Walk;
@@ -28,8 +29,11 @@ mod binary;
 use binary::{
     BinSpecificProperties, BinType, Binaries, Binary, Process, Processes,
 };
+#[cfg(feature = "elf")]
 use checksec::elf;
+#[cfg(feature = "macho")]
 use checksec::macho;
+#[cfg(feature = "pe")]
 use checksec::pe;
 use checksec::underline;
 
@@ -55,6 +59,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     }
     if let Ok(buffer) = unsafe { Mmap::map(&fp.unwrap()) } {
         match Object::parse(&buffer)? {
+            #[cfg(feature = "elf")]
             Object::Elf(elf) => {
                 let results = elf::CheckSecResults::parse(&elf);
                 let bin_type =
@@ -65,6 +70,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
                     BinSpecificProperties::Elf(results),
                 )]);
             }
+            #[cfg(feature = "pe")]
             Object::PE(pe) => {
                 let results = pe::CheckSecResults::parse(&pe, &buffer);
                 let bin_type =
@@ -75,6 +81,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
                     BinSpecificProperties::PE(results),
                 )]);
             }
+            #[cfg(feature = "macho")]
             Object::Mach(mach) => match mach {
                 Mach::Binary(macho) => {
                     let results = macho::CheckSecResults::parse(&macho);
