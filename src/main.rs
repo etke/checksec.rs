@@ -124,17 +124,15 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
 
 fn walk(basepath: &Path, json: bool, pretty: bool) {
     let mut bins: Vec<Binary> = Vec::new();
-    for result in Walk::new(basepath) {
-        if let Ok(entry) = result {
-            if let Some(filetype) = entry.file_type() {
-                if filetype.is_file() {
-                    if let Ok(mut result) = parse(entry.path()) {
-                        if json {
-                            bins.append(&mut result);
-                        } else {
-                            for bin in &result {
-                                println!("{}", bin);
-                            }
+    for result in Walk::new(basepath).flatten() {
+        if let Some(filetype) = result.file_type() {
+            if filetype.is_file() {
+                if let Ok(mut result) = parse(result.path()) {
+                    if json {
+                        bins.append(&mut result);
+                    } else {
+                        for bin in &result {
+                            println!("{}", bin);
                         }
                     }
                 }
