@@ -250,25 +250,28 @@ impl Properties for Elf<'_> {
     fn has_canary(&self) -> bool {
         for sym in &self.dynsyms {
             if let Some(name) = self.dynstrtab.get(sym.st_name) {
-                if let Ok(name) = name {
-                    match name {
+                    match name.ok().as_deref().unwrap() {
                         "__stack_chk_fail" | "__intel_security_cookie" => {
                             return true
                         }
                         _ => continue,
                     }
-                }
             }
         }
         false
     }
     fn has_clang_cfi(&self) -> bool {
-        for sym in &self.dynsyms {
-            if let Some(name) = self.dynstrtab.get(sym.st_name) {
-                if let Ok(name) = name {
-                    if name.contains(".cfi") {
+        for sym in &self.syms {
+            if let Some(Ok(name)) = self.strtab.get(sym.st_name) {
+                if name.contains(".cfi") {
                         return true;
-                    }
+                }
+            }
+        }
+        for sym in &self.dynsyms {
+            if let Some(Ok(name)) = self.dynstrtab.get(sym.st_name) {
+                    if name.contains(".cfi") || name.contains("_cfi") {
+                        return true;
                 }
             }
         }
@@ -276,11 +279,9 @@ impl Properties for Elf<'_> {
     }
     fn has_clang_safestack(&self) -> bool {
         for sym in &self.dynsyms {
-            if let Some(name) = self.dynstrtab.get(sym.st_name) {
-                if let Ok(name) = name {
-                    if name == "__safestack_init" {
-                        return true;
-                    }
+            if let Some(Ok(name)) = self.dynstrtab.get(sym.st_name) {
+                if name == "__safestack_init" {
+                    return true;
                 }
             }
         }
@@ -288,11 +289,9 @@ impl Properties for Elf<'_> {
     }
     fn has_fortify(&self) -> bool {
         for sym in &self.dynsyms {
-            if let Some(name) = self.dynstrtab.get(sym.st_name) {
-                if let Ok(name) = name {
-                    if name.ends_with("_chk") {
-                        return true;
-                    }
+            if let Some(Ok(name)) = self.dynstrtab.get(sym.st_name) {
+                if name.ends_with("_chk") {
+                    return true;
                 }
             }
         }
@@ -301,11 +300,9 @@ impl Properties for Elf<'_> {
     fn has_fortified(&self) -> u32 {
         let mut fortified_count: u32 = 0;
         for sym in &self.dynsyms {
-            if let Some(name) = self.dynstrtab.get(sym.st_name) {
-                if let Ok(name) = name {
-                    if name.ends_with("_chk") {
-                        fortified_count += 1;
-                    }
+            if let Some(Ok(name)) = self.dynstrtab.get(sym.st_name) {
+                if name.ends_with("_chk") {
+                    fortified_count += 1;
                 }
             }
         }
@@ -381,13 +378,10 @@ impl Properties for Elf<'_> {
         if let Some(dynamic) = &self.dynamic {
             for dynamic in &dynamic.dyns {
                 if dynamic.d_tag == tag {
-                    #[allow(clippy::clippy::cast_possible_truncation)]
-                    if let Some(name) =
-                        self.dynstrtab.get(dynamic.d_val as usize)
+                    #[allow(clippy::cast_possible_truncation)]
+                    if let Some(Ok(name)) = self.dynstrtab.get(dynamic.d_val as usize)
                     {
-                        if let Ok(name) = name {
-                            return Some(name.to_string());
-                        }
+                        return Some(name.to_string());
                     }
                 }
             }
