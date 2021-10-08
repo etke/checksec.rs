@@ -235,7 +235,7 @@ fn main() {
         let system =
             System::new_with_specifics(RefreshKind::new().with_processes());
         let mut procs: Vec<Process> = Vec::new();
-        for (pid, proc_entry) in system.get_processes() {
+        for (pid, proc_entry) in system.processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
                 if json {
                     #[allow(clippy::cast_sign_loss)]
@@ -273,7 +273,7 @@ fn main() {
             System::new_with_specifics(RefreshKind::new().with_processes());
 
         for procid in procids {
-            let process = if let Some(process) = system.get_process(procid) {
+            let process = if let Some(process) = system.process(procid) {
                 process
             } else {
                 eprintln!("No process found with ID {}", procid);
@@ -323,7 +323,7 @@ fn main() {
     } else if let Some(procname) = procname {
         let system =
             System::new_with_specifics(RefreshKind::new().with_processes());
-        let sysprocs = system.get_process_by_name(procname);
+        let sysprocs = system.process_by_name(procname);
         if sysprocs.is_empty() {
             eprintln!("No process found matching name {}", procname);
             process::exit(1);
