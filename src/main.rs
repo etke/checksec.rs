@@ -242,7 +242,7 @@ fn main() {
                     procs.append(&mut vec![Process::new(
                         *pid as usize,
                         results,
-                    )])
+                    )]);
                 } else {
                     for result in &results {
                         println!(
@@ -336,7 +336,7 @@ fn main() {
                     procs.append(&mut vec![Process::new(
                         proc_entry.pid() as usize,
                         results,
-                    )])
+                    )]);
                 } else {
                     for result in &results {
                         println!(
