@@ -44,6 +44,10 @@ pub struct CheckSecResults {
     pub code_signature: bool,
     /// Encrypted (`LC_ENCRYPTION_INFO`/`LC_ENCRYPTION_INFO_64`)
     pub encrypted: bool,
+    /// Fortify (*CFLAGS=*`-D_FORTIFY_SOURCE`)
+    pub fortify: bool,
+    /// Fortified functions
+    pub fortified: u32,
     /// Non-Executable Heap (`MH_NO_HEAP_EXECUTION`)
     pub nx_heap: bool,
     /// Non-Executable Stack (`MH_ALLOW_STACK_EXECUTION`)
@@ -64,6 +68,8 @@ impl CheckSecResults {
             canary: macho.has_canary(),
             code_signature: macho.has_code_signature(),
             encrypted: macho.has_encrypted(),
+            fortify: macho.has_fortify(),
+            fortified: macho.has_fortified(),
             nx_heap: macho.has_nx_heap(),
             nx_stack: macho.has_nx_stack(),
             pie: macho.has_pie(),
@@ -80,12 +86,14 @@ impl fmt::Display for CheckSecResults {
         write!(
             f,
             "ARC: {} Canary: {} Code Signature: {} Encryption: {} \
-            NX Heap: {} NX Stack: {} PIE: {} Restrict: {} \
-            RPath: {}",
+            Fortify: {} Fortified {:2} NX Heap: {} \
+            NX Stack: {} PIE: {} Restrict: {} RPath: {}",
             self.arc,
             self.canary,
             self.code_signature,
             self.encrypted,
+            self.fortify,
+            self.fortified,
             self.nx_heap,
             self.nx_stack,
             self.pie,
@@ -98,7 +106,8 @@ impl fmt::Display for CheckSecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} \
+            {} {} {} {} {} {}",
             "ARC:".bold(),
             colorize_bool!(self.arc),
             "Canary:".bold(),
@@ -107,6 +116,10 @@ impl fmt::Display for CheckSecResults {
             colorize_bool!(self.code_signature),
             "Encrypted:".bold(),
             colorize_bool!(self.encrypted),
+            "Fortify:".bold(),
+            colorize_bool!(self.fortify),
+            "Fortified:".bold(),
+            self.fortified,
             "NX Heap:".bold(),
             colorize_bool!(self.nx_heap),
             "NX Stack:".bold(),
@@ -152,6 +165,10 @@ pub trait MachOProperties {
     /// check if `cryptid` has a value set for EncryptionInfo32/64 in load
     /// commands
     fn has_encrypted(&self) -> bool;
+    /// check for symbols ending in `_chk` from symbols
+    fn has_fortify(&self) -> bool;
+    /// count symbols ending in `_chk` from symbols
+    fn has_fortified(&self) -> u32;
     /// check `MH_NO_HEAP_EXECUTION` *(0x01000000)* in `MachO` header flags
     fn has_nx_heap(&self) -> bool;
     /// check `MH_ALLOW_STACK_EXECUTION` *(0x00020000)* in `MachO` header flags
@@ -214,6 +231,23 @@ impl MachOProperties for MachO<'_> {
             }
         }
         false
+    }
+    fn has_fortify(&self) -> bool {
+        for sym in self.symbols().flatten() {
+            if sym.0.ends_with("_chk") {
+                return true;
+            }
+        }
+        false
+    }
+    fn has_fortified(&self) -> u32 {
+        let mut fortified_count: u32 = 0;
+        for sym in self.symbols().flatten() {
+            if sym.0.ends_with("_chk") {
+                fortified_count += 1;
+            }
+        }
+        fortified_count
     }
     fn has_nx_heap(&self) -> bool {
         matches!(self.header.flags & MH_NO_HEAP_EXECUTION, x if x != 0)
