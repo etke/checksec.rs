@@ -4,7 +4,9 @@ extern crate ignore;
 extern crate serde_json;
 extern crate sysinfo;
 
-use clap::{crate_authors, crate_description, crate_version, App, Arg};
+use clap::{
+    crate_authors, crate_description, crate_version, App, AppSettings, Arg,
+};
 use goblin::error::Error;
 #[cfg(feature = "macho")]
 use goblin::mach::{Mach, MachO};
@@ -14,7 +16,9 @@ use memmap::Mmap;
 #[cfg(not(feature = "color"))]
 use serde_json::to_string_pretty;
 use serde_json::{json, Value};
-use sysinfo::{ProcessExt, RefreshKind, System, SystemExt};
+use sysinfo::{
+    PidExt, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
+};
 
 use std::path::Path;
 use std::{env, fs, io, process};
@@ -149,9 +153,10 @@ fn main() {
         .about(crate_description!())
         .author(crate_authors!())
         .version(crate_version!())
+        .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
-            Arg::with_name("file")
-                .short("f")
+            Arg::new("file")
+                .short('f')
                 .long("file")
                 .value_name("FILE")
                 .help("Target file")
@@ -162,8 +167,8 @@ fn main() {
                 .conflicts_with("process-all"),
         )
         .arg(
-            Arg::with_name("directory")
-                .short("d")
+            Arg::new("directory")
+                .short('d')
                 .long("directory")
                 .value_name("DIRECTORY")
                 .help("Target directory")
@@ -174,20 +179,20 @@ fn main() {
                 .conflicts_with("process-all"),
         )
         .arg(
-            Arg::with_name("json")
-                .short("j")
+            Arg::new("json")
+                .short('j')
                 .long("json")
                 .help("Output in json format"),
         )
         .arg(
-            Arg::with_name("pretty")
+            Arg::new("pretty")
                 .long("pretty")
                 .help("Human readable json output")
                 .requires("json"),
         )
         .arg(
-            Arg::with_name("process")
-                .short("p")
+            Arg::new("process")
+                .short('p')
                 .long("process")
                 .value_name("NAME")
                 .help("Name of running process to check")
@@ -198,7 +203,7 @@ fn main() {
                 .conflicts_with("process-all"),
         )
         .arg(
-            Arg::with_name("pid")
+            Arg::new("pid")
                 .long("pid")
                 .value_name("PID")
                 .help(
@@ -212,8 +217,8 @@ fn main() {
                 .conflicts_with("process-all"),
         )
         .arg(
-            Arg::with_name("process-all")
-                .short("P")
+            Arg::new("process-all")
+                .short('P')
                 .long("process-all")
                 .help("Check all running processes")
                 .conflicts_with("directory")
@@ -232,15 +237,17 @@ fn main() {
     let procall = args.is_present("process-all");
 
     if procall {
-        let system =
-            System::new_with_specifics(RefreshKind::new().with_processes());
+        let system = System::new_with_specifics(
+            RefreshKind::new()
+                .with_processes(ProcessRefreshKind::new().with_cpu()),
+        );
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
                 if json {
                     #[allow(clippy::cast_sign_loss)]
                     procs.append(&mut vec![Process::new(
-                        *pid as usize,
+                        pid.as_u32() as usize,
                         results,
                     )]);
                 } else {
@@ -269,8 +276,10 @@ fn main() {
                 }
             })
             .collect();
-        let system =
-            System::new_with_specifics(RefreshKind::new().with_processes());
+        let system = System::new_with_specifics(
+            RefreshKind::new()
+                .with_processes(ProcessRefreshKind::new().with_cpu()),
+        );
 
         for procid in procids {
             let process = if let Some(process) = system.process(procid) {
@@ -295,7 +304,10 @@ fn main() {
                     if json {
                         #[allow(clippy::cast_sign_loss)]
                         json_print(
-                            &json!(Process::new(procid as usize, results)),
+                            &json!(Process::new(
+                                procid.as_u32() as usize,
+                                results
+                            )),
                             pretty,
                         );
                     } else {
@@ -321,20 +333,18 @@ fn main() {
             }
         }
     } else if let Some(procname) = procname {
-        let system =
-            System::new_with_specifics(RefreshKind::new().with_processes());
-        let sysprocs = system.process_by_name(procname);
-        if sysprocs.is_empty() {
-            eprintln!("No process found matching name {}", procname);
-            process::exit(1);
-        }
+        let system = System::new_with_specifics(
+            RefreshKind::new()
+                .with_processes(ProcessRefreshKind::new().with_cpu()),
+        );
+        let sysprocs = system.processes_by_name(procname);
         let mut procs: Vec<Process> = Vec::new();
-        for proc_entry in &sysprocs {
+        for proc_entry in sysprocs {
             if let Ok(results) = parse(proc_entry.exe()) {
                 if json {
                     #[allow(clippy::cast_sign_loss)]
                     procs.append(&mut vec![Process::new(
-                        proc_entry.pid() as usize,
+                        proc_entry.pid().as_u32() as usize,
                         results,
                     )]);
                 } else {
@@ -348,6 +358,10 @@ fn main() {
                     }
                 }
             }
+        }
+        if procs.is_empty() {
+            eprintln!("No process found matching name {}", procname);
+            process::exit(1);
         }
         if json {
             json_print(&json!(Processes::new(procs)), pretty);
@@ -388,8 +402,5 @@ fn main() {
                 process::exit(1);
             }
         }
-    } else {
-        eprintln!("{}", args.usage());
-        process::exit(1);
     }
 }
