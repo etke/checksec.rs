@@ -9,7 +9,7 @@ use clap::{
 };
 use goblin::error::Error;
 #[cfg(feature = "macho")]
-use goblin::mach::{Mach, MachO};
+use goblin::mach::Mach;
 use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
@@ -102,20 +102,30 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
                 }
                 Mach::Fat(fatmach) => {
                     let mut fat_bins: Vec<Binary> = Vec::new();
-                    for (idx, _) in fatmach.iter_arches().enumerate() {
-                        let container: MachO = fatmach.get(idx).unwrap();
-                        let results =
-                            macho::CheckSecResults::parse(&container);
-                        let bin_type = if container.is_64 {
-                            BinType::MachO64
-                        } else {
-                            BinType::MachO32
-                        };
-                        fat_bins.append(&mut vec![Binary::new(
-                            bin_type,
-                            file.display().to_string(),
-                            BinSpecificProperties::MachO(results),
-                        )]);
+                    match fatmach.arches() {
+                        Ok(arches) => {
+                            for (idx, _) in arches.iter().enumerate() {
+                                if let Ok(container) = fatmach.get(idx) {
+                                    let results =
+                                        macho::CheckSecResults::parse(
+                                            &container,
+                                        );
+                                    let bin_type = if container.is_64 {
+                                        BinType::MachO64
+                                    } else {
+                                        BinType::MachO32
+                                    };
+                                    fat_bins.append(&mut vec![Binary::new(
+                                        bin_type,
+                                        file.display().to_string(),
+                                        BinSpecificProperties::MachO(results),
+                                    )]);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
                     }
                     return Ok(fat_bins);
                 }
