@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 extern crate clap;
 extern crate goblin;
 extern crate ignore;

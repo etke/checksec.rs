@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 //! ![checksec](https://raw.githubusercontent.com/etke/checksec.rs/master/resources/checksec.svg?sanitize=true)
 //!
 //! Checksec is a standalone command line utility and library that provides
@@ -42,6 +43,7 @@
 //! for examples of working with both `*Properties` traits and
 //! `*CheckSecResults` structs.
 //!
+
 #[cfg(feature = "elf")]
 pub mod elf;
 #[cfg(feature = "macho")]
