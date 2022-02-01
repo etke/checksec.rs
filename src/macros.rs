@@ -7,8 +7,8 @@ macro_rules! colorize_bool {
             format!("{:<5}", $tf).bright_green().to_string()
         } else {
             format!("{:<5}", $tf).red().to_string()
-        };
-    };
+        }
+    }
 }
 
 #[macro_export]
