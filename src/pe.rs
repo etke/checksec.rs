@@ -1,12 +1,18 @@
 //! Implements checksec for PE32/32+ binaries
 #[cfg(feature = "color")]
 use colored::Colorize;
-use goblin::pe::utils::get_data;
+use goblin::pe::utils::find_offset;
 use goblin::pe::PE;
+use goblin::pe::{
+    data_directories::DataDirectory, options::ParseOptions,
+    section_table::SectionTable,
+};
 use memmap::Mmap;
+use scroll::Pread;
 use scroll_derive::Pread;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::mem::size_of;
 
 #[cfg(feature = "color")]
 use crate::colorize_bool;
@@ -200,6 +206,33 @@ impl From<ImageLoadConfigDirectory32> for ImageLoadConfigDirectory {
                 as u64,
             volatiile_metadata_pointer: cfg.volatiile_metadata_pointer as u64,
         }
+    }
+}
+
+fn get_load_config_val(
+    mem: &[u8],
+    load_config_hdr: DataDirectory,
+    sections: &[SectionTable],
+    file_alignment: u32,
+) -> Result<ImageLoadConfigDirectory, scroll::Error> {
+    let dir_size = size_of::<ImageLoadConfigDirectory>();
+    let rva = load_config_hdr.virtual_address as usize;
+    if let Ok(offset) =
+        find_offset(rva, sections, file_alignment, &ParseOptions::default())
+            .ok_or_else(|| {
+                goblin::error::Error::Malformed(
+                    load_config_hdr.virtual_address.to_string(),
+                )
+            })
+    {
+        let load_config_val = mem[offset..offset + dir_size].pread(0);
+
+        match load_config_val {
+            Ok(val) => Ok(val),
+            Err(e) => Err(e),
+        }
+    } else {
+        Err(scroll::Error::BadOffset(rva))
     }
 }
 
@@ -490,14 +523,19 @@ impl Properties for PE<'_> {
             if let Some(load_config_hdr) =
                 optional_header.data_directories.get_load_config_table()
             {
-                let load_config_val: ImageLoadConfigDirectory =
-                    get_data(mem, sections, *load_config_hdr, file_alignment)
-                        .unwrap();
-                if let Some(certificate_table) =
-                    optional_header.data_directories.get_certificate_table()
-                {
-                    return load_config_val.code_integrity.flags != 0
-                        || certificate_table.virtual_address != 0;
+                if let Ok(load_config_val) = get_load_config_val(
+                    mem,
+                    *load_config_hdr,
+                    sections,
+                    file_alignment,
+                ) {
+                    if let Some(certificate_table) = optional_header
+                        .data_directories
+                        .get_certificate_table()
+                    {
+                        return load_config_val.code_integrity.flags != 0
+                            || certificate_table.virtual_address != 0;
+                    }
                 }
             }
         }
@@ -566,10 +604,14 @@ impl Properties for PE<'_> {
             if let Some(load_config_hdr) =
                 optional_header.data_directories.get_load_config_table()
             {
-                let load_config_val: ImageLoadConfigDirectory =
-                    get_data(mem, sections, *load_config_hdr, file_alignment)
-                        .unwrap();
-                return load_config_val.security_cookie != 0;
+                if let Ok(load_config_val) = get_load_config_val(
+                    mem,
+                    *load_config_hdr,
+                    sections,
+                    file_alignment,
+                ) {
+                    return load_config_val.security_cookie != 0;
+                }
             }
         }
         false
@@ -603,15 +645,19 @@ impl Properties for PE<'_> {
             if let Some(load_config_hdr) =
                 optional_header.data_directories.get_load_config_table()
             {
-                let load_config_val: ImageLoadConfigDirectory =
-                    get_data(mem, sections, *load_config_hdr, file_alignment)
-                        .unwrap();
-                let guard_flags = load_config_val.guard_flags;
-                if (guard_flags & IMAGE_GUARD_RF_INSTRUMENTED) != 0
-                    && (guard_flags & IMAGE_GUARD_RF_ENABLE) != 0
-                    || (guard_flags & IMAGE_GUARD_RF_STRICT) != 0
-                {
-                    return true;
+                if let Ok(load_config_val) = get_load_config_val(
+                    mem,
+                    *load_config_hdr,
+                    sections,
+                    file_alignment,
+                ) {
+                    let guard_flags = load_config_val.guard_flags;
+                    if (guard_flags & IMAGE_GUARD_RF_INSTRUMENTED) != 0
+                        && (guard_flags & IMAGE_GUARD_RF_ENABLE) != 0
+                        || (guard_flags & IMAGE_GUARD_RF_STRICT) != 0
+                    {
+                        return true;
+                    }
                 }
             }
         }
@@ -624,10 +670,14 @@ impl Properties for PE<'_> {
             if let Some(load_config_hdr) =
                 optional_header.data_directories.get_load_config_table()
             {
-                let load_config_val: ImageLoadConfigDirectory =
-                    get_data(mem, sections, *load_config_hdr, file_alignment)
-                        .unwrap();
-                return load_config_val.sehandler_count != 0;
+                if let Ok(load_config_val) = get_load_config_val(
+                    mem,
+                    *load_config_hdr,
+                    sections,
+                    file_alignment,
+                ) {
+                    return load_config_val.sehandler_count != 0;
+                }
             }
         }
         false
