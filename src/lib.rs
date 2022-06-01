@@ -29,12 +29,12 @@
 //! binary executable format.
 //!
 //! * [`checksec::elf::Properties`](crate::elf::Properties)
-//! * [`checksec::macho::MachOProperties`](crate::macho::MachOProperties)
+//! * [`checksec::macho::Properties`](crate::macho::Properties)
 //! * [`checksec::pe::Properties`](crate::pe::Properties)
 //!
 //! ```rust
 //! use checksec::elf::Properties as ElfProperties;
-//! use checksec::macho::MachOProperties as MachOProperties;
+//! use checksec::macho::Properties as Properties;
 //! use checksec::pe::Properties as PEProperties;
 //! ```
 //!
