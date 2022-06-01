@@ -12,14 +12,14 @@
 //! [`goblin::Object`](https://docs.rs/goblin/latest/goblin/enum.Object.html)
 //! object to the parse method.
 //!
-//! * [`checksec::elf::ElfCheckSecResults`](./elf/struct.ElfCheckSecResults.html)
-//! * [`checksec::macho::MachOCheckSecResults`](./macho/struct.MachOCheckSecResults.html)
-//! * [`checksec::pe::PECheckSecResults`](./pe/struct.PECheckSecResults.html)
+//! * [`checksec::elf::CheckSecResults`](crate::elf::CheckSecResults)
+//! * [`checksec::macho::CheckSecResults`](crate::macho::CheckSecResults)
+//! * [`checksec::pe::CheckSecResults`](crate::pe::CheckSecResults)
 //!
 //! ```rust
-//! use checksec::elf::ElfCheckSecResults;
-//! use checksec::macho::MachOCheckSecResults;
-//! use checksec::pe::PECheckSecResults;
+//! use checksec::elf::CheckSecResults as ElfCheckSecResults;
+//! use checksec::macho::CheckSecResults as MachOCheckSecResults;
+//! use checksec::pe::CheckSecResults as PECheckSecResults;
 //! ```
 //!
 //! **Traits**
@@ -28,14 +28,14 @@
 //! have direct access to the security property check functions for a given
 //! binary executable format.
 //!
-//! * [`checksec::elf::ElfProperties`](./elf/trait.ElfProperties.html)
-//! * [`checksec::macho::MachOProperties`](./macho/trait.MachOProperties.html)
-//! * [`checksec::pe::PEProperties`](./pe/trait.PEProperties.html)
+//! * [`checksec::elf::Properties`](crate::elf::Properties)
+//! * [`checksec::macho::MachOProperties`](crate::macho::MachOProperties)
+//! * [`checksec::pe::Properties`](crate::pe::Properties)
 //!
 //! ```rust
-//! use checksec::elf::ElfProperties;
-//! use checksec::macho::MachOProperties;
-//! use checksec::pe::PEProperties;
+//! use checksec::elf::Properties as ElfProperties;
+//! use checksec::macho::MachOProperties as MachOProperties;
+//! use checksec::pe::Properties as PEProperties;
 //! ```
 //!
 //! Refer to the generated docs or the examples directory

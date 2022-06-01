@@ -24,11 +24,9 @@ const MH_NO_HEAP_EXECUTION: u32 = 0x0100_0000;
 /// use std::fs;
 ///
 /// pub fn print_results(binary: &String) {
-///     if let Ok(fp) = fs::File::open(&binary) {
-///         if let Ok(buf) = fs::read(fp) {
-///             if let Ok(macho) = MachO::parse(&buf) {
-///                 println!("{:#?}", CheckSecResults::parse(&macho));
-///             }
+///     if let Ok(buf) = fs::read(binary) {
+///         if let Ok(macho) = MachO::parse(&buf, 0) {
+///             println!("{:#?}", CheckSecResults::parse(&macho));
 ///         }
 ///     }
 /// }
@@ -146,11 +144,9 @@ impl fmt::Display for CheckSecResults {
 /// use std::fs;
 ///
 /// pub fn print_results(binary: &String) {
-///     if let Ok(fp) = fs::File::open(&binary) {
-///         if let Ok(buf) = fs::read(fp) {
-///             if let Ok(macho) = MachO::parse(&buf) {
-///                 println!("arc: {}", macho.has_arc());
-///             }
+///     if let Ok(buf) = fs::read(binary) {
+///         if let Ok(macho) = MachO::parse(&buf, 0) {
+///             println!("arc: {}", macho.has_arc());
 ///         }
 ///     }
 /// }
