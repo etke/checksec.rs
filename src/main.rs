@@ -6,7 +6,7 @@ extern crate serde_json;
 extern crate sysinfo;
 
 use clap::{
-    crate_authors, crate_description, crate_version, App, AppSettings, Arg,
+    crate_authors, crate_description, crate_version, Command, Arg,
 };
 use goblin::error::Error;
 #[cfg(feature = "macho")]
@@ -160,11 +160,11 @@ fn walk(basepath: &Path, json: bool, pretty: bool) {
 }
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
-    let args = App::new("checksec")
+    let args = Command::new("checksec")
         .about(crate_description!())
         .author(crate_authors!())
         .version(crate_version!())
-        .setting(AppSettings::ArgRequiredElseHelp)
+        .arg_required_else_help(true)
         .arg(
             Arg::new("file")
                 .short('f')
