@@ -5,9 +5,7 @@ extern crate ignore;
 extern crate serde_json;
 extern crate sysinfo;
 
-use clap::{
-    crate_authors, crate_description, crate_version, Command, Arg,
-};
+use clap::{crate_authors, crate_description, crate_version, Arg, Command};
 use goblin::error::Error;
 #[cfg(feature = "macho")]
 use goblin::mach::Mach;
