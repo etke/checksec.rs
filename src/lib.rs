@@ -34,7 +34,7 @@
 //!
 //! ```rust
 //! use checksec::elf::Properties as ElfProperties;
-//! use checksec::macho::Properties as Properties;
+//! use checksec::macho::Properties as MachOProperties;
 //! use checksec::pe::Properties as PEProperties;
 //! ```
 //!
