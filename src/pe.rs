@@ -275,8 +275,8 @@ impl fmt::Display for ASLR {
 /// **Example**
 ///
 /// ```rust
-/// use checksec::pe::Properties;
-/// use goblin::pe::PE;
+/// use checksec::pe::{Properties, CheckSecResults};
+/// use goblin::{pe::PE, Object};
 /// use memmap::Mmap;
 /// use std::fs;
 ///

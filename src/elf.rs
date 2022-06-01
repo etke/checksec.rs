@@ -94,11 +94,9 @@ impl fmt::Display for PIE {
 /// use std::fs;
 ///
 /// pub fn print_results(binary: &String) {
-///     if let Ok(fp) = fs::File::open(&binary) {
-///         if let Ok(buf) = fs::read(fp) {
-///             if let Ok(elf) = Elf::parse(&buf) {
-///                 println!("{:#?}", ElfCheckSecResults::parse(&elf));
-///             }
+///     if let Ok(buf) = fs::read(binary) {
+///         if let Ok(elf) = Elf::parse(&buf) {
+///             println!("{:#?}", CheckSecResults::parse(&elf));
 ///         }
 ///     }
 /// }
@@ -207,11 +205,9 @@ impl fmt::Display for CheckSecResults {
 /// use std::fs;
 ///
 /// pub fn print_results(binary: &String) {
-///     if let Ok(fp) = fs::File::open(&binary) {
-///         if let Ok(buf) = fs::read(fp) {
-///             if let Ok(elf) = Elf::parse(&buf) {
-///                 println!("Canary: {}", elf.has_canary());
-///             }
+///     if let Ok(buf) = fs::read(binary) {
+///         if let Ok(elf) = Elf::parse(&buf) {
+///             println!("Canary: {}", elf.has_canary());
 ///         }
 ///     }
 /// }
