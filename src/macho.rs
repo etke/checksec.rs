@@ -139,7 +139,7 @@ impl fmt::Display for CheckSecResults {
 /// **Example**
 ///
 /// ```rust
-/// use checksec::macho::MachOProperties;
+/// use checksec::macho::Properties;
 /// use goblin::mach::MachO;
 /// use std::fs;
 ///
@@ -151,7 +151,7 @@ impl fmt::Display for CheckSecResults {
 ///     }
 /// }
 /// ```
-pub trait MachOProperties {
+pub trait Properties {
     /// check import names for `_objc_release`
     fn has_arc(&self) -> bool;
     /// check import names for `___stack_chk_fail` or `___stack_chk_guard`
@@ -177,7 +177,7 @@ pub trait MachOProperties {
     /// check for `RPath` in load commands
     fn has_rpath(&self) -> bool;
 }
-impl MachOProperties for MachO<'_> {
+impl Properties for MachO<'_> {
     fn has_arc(&self) -> bool {
         if let Ok(imports) = self.imports() {
             for import in &imports {
