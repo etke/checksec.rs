@@ -28,7 +28,7 @@ panic = 'abort'     # Abort on panic
 clap = { version = "3.1.18", features = ["cargo"] }
 colored = { version = "2.0.0", optional = true }
 colored_json = { version = "2.1.0", optional = true }
-goblin = "0.5.1"
+goblin = "0.5.2"
 ignore = "0.4.18"
 memmap = "0.7.0"
 scroll = "0.11.0"
@@ -36,7 +36,7 @@ scroll_derive = "0.11.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_derive = "1.0.137"
 serde_json = "1.0.81"
-sysinfo = "0.23.13"
+sysinfo = "0.24.2"
 
 [lib]
 name = "checksec"
