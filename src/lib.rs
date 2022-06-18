@@ -54,3 +54,4 @@ pub mod pe;
 #[cfg(feature = "shared")]
 #[macro_use]
 pub mod shared;
+pub mod output;

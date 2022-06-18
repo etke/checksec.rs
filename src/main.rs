@@ -12,9 +12,7 @@ use goblin::mach::Mach;
 use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
-#[cfg(not(feature = "color"))]
-use serde_json::to_string_pretty;
-use serde_json::{json, Value};
+use serde_json::{json, to_string_pretty, Value};
 use sysinfo::{
     PidExt, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
 };
@@ -36,15 +34,20 @@ use binary::{
 use checksec::elf;
 #[cfg(feature = "macho")]
 use checksec::macho;
+use checksec::output;
 #[cfg(feature = "pe")]
 use checksec::pe;
 use checksec::underline;
 
-fn json_print(data: &Value, pretty: bool) {
-    if pretty {
+fn json_print(data: &Value, settings: &output::Settings) {
+    if settings.pretty {
         #[cfg(feature = "color")]
-        if let Ok(colored_json) = to_colored_json_auto(data) {
-            println!("{}", colored_json);
+        if settings.color {
+            if let Ok(colored_json) = to_colored_json_auto(data) {
+                println!("{}", colored_json);
+            }
+        } else if let Ok(json_str) = to_string_pretty(data) {
+            println!("{}", json_str);
         }
         #[cfg(not(feature = "color"))]
         if let Ok(json_str) = to_string_pretty(data) {
@@ -135,13 +138,13 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     Err(Error::IO(io::Error::last_os_error()))
 }
 
-fn walk(basepath: &Path, json: bool, pretty: bool) {
+fn walk(basepath: &Path, settings: &output::Settings) {
     let mut bins: Vec<Binary> = Vec::new();
     for result in Walk::new(basepath).flatten() {
         if let Some(filetype) = result.file_type() {
             if filetype.is_file() {
                 if let Ok(mut result) = parse(result.path()) {
-                    if json {
+                    if settings.json {
                         bins.append(&mut result);
                     } else {
                         for bin in &result {
@@ -152,8 +155,8 @@ fn walk(basepath: &Path, json: bool, pretty: bool) {
             }
         }
     }
-    if json {
-        json_print(&json!(Binaries::new(bins)), pretty);
+    if settings.json {
+        json_print(&json!(Binaries::new(bins)), settings);
     }
 }
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
@@ -192,6 +195,11 @@ fn main() {
                 .short('j')
                 .long("json")
                 .help("Output in json format"),
+        )
+        .arg(
+            Arg::new("no-color")
+                .long("no-color")
+                .help("Disables color output"),
         )
         .arg(
             Arg::new("pretty")
@@ -237,13 +245,18 @@ fn main() {
         )
         .get_matches();
 
-    let json = args.is_present("json");
     let file = args.value_of("file");
     let directory = args.value_of("directory");
-    let pretty = args.is_present("pretty");
     let procids = args.value_of("pid");
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
+
+    let settings = output::Settings::set(
+        #[cfg(feature = "color")]
+        !args.is_present("no-color"),
+        args.is_present("json"),
+        args.is_present("pretty"),
+    );
 
     if procall {
         let system = System::new_with_specifics(
@@ -253,7 +266,7 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
-                if json {
+                if settings.json {
                     #[allow(clippy::cast_sign_loss)]
                     procs.append(&mut vec![Process::new(
                         pid.as_u32() as usize,
@@ -271,8 +284,8 @@ fn main() {
                 }
             }
         }
-        if json {
-            json_print(&json!(Processes::new(procs)), pretty);
+        if settings.json {
+            json_print(&json!(Processes::new(procs)), &settings);
         }
     } else if let Some(procids) = procids {
         let procids: Vec<sysinfo::Pid> = procids
@@ -310,14 +323,14 @@ fn main() {
 
             match parse(process.exe()) {
                 Ok(results) => {
-                    if json {
+                    if settings.json {
                         #[allow(clippy::cast_sign_loss)]
                         json_print(
                             &json!(Process::new(
                                 procid.as_u32() as usize,
                                 results
                             )),
-                            pretty,
+                            &settings,
                         );
                     } else {
                         for result in &results {
@@ -350,7 +363,7 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for proc_entry in sysprocs {
             if let Ok(results) = parse(proc_entry.exe()) {
-                if json {
+                if settings.json {
                     #[allow(clippy::cast_sign_loss)]
                     procs.append(&mut vec![Process::new(
                         proc_entry.pid().as_u32() as usize,
@@ -372,8 +385,8 @@ fn main() {
             eprintln!("No process found matching name {}", procname);
             process::exit(1);
         }
-        if json {
-            json_print(&json!(Processes::new(procs)), pretty);
+        if settings.json {
+            json_print(&json!(Processes::new(procs)), &settings);
         }
     } else if let Some(directory) = directory {
         let directory_path = Path::new(directory);
@@ -383,7 +396,7 @@ fn main() {
             process::exit(1);
         }
 
-        walk(directory_path, json, pretty);
+        walk(directory_path, &settings);
     } else if let Some(file) = file {
         let file_path = Path::new(file);
 
@@ -394,8 +407,8 @@ fn main() {
 
         match parse(file_path) {
             Ok(results) => {
-                if json {
-                    json_print(&json!(Binaries::new(results)), pretty);
+                if settings.json {
+                    json_print(&json!(Binaries::new(results)), &settings);
                 } else {
                     for result in &results {
                         println!("{}", result);
