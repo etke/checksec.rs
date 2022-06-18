@@ -10,7 +10,7 @@ use checksec::macho;
 #[cfg(feature = "pe")]
 use checksec::pe;
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum BinType {
     #[cfg(feature = "elf")]
     Elf32,
@@ -75,7 +75,7 @@ pub enum BinSpecificProperties {
 }
 impl fmt::Display for BinSpecificProperties {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &*self {
+        match self {
             #[cfg(feature = "elf")]
             Self::Elf(b) => write!(f, "{}", b),
             #[cfg(feature = "pe")]

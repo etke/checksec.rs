@@ -28,8 +28,7 @@ impl fmt::Display for VecRpath {
         let mut s: Vec<String> = Vec::<String>::new();
         for v in &self.paths {
             match v {
-                Rpath::Yes(p) => s.push(p.to_string()),
-                Rpath::YesRW(p) => s.push(p.to_string()),
+                Rpath::Yes(p) | Rpath::YesRW(p) => s.push(p.to_string()),
                 Rpath::None => s.push("None".to_string()),
             }
         }

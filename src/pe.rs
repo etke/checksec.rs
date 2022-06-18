@@ -224,12 +224,7 @@ fn get_load_config_val(
                 )
             })
     {
-        let load_config_val = mem[offset..offset + dir_size].pread(0);
-
-        match load_config_val {
-            Ok(val) => Ok(val),
-            Err(e) => Err(e),
-        }
+        mem[offset..offset + dir_size].pread(0)
     } else {
         Err(scroll::Error::BadOffset(rva))
     }

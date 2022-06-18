@@ -15,7 +15,7 @@ use crate::colorize_bool;
 use crate::shared::{Rpath, VecRpath};
 
 /// Relocation Read-Only mode: `None`, `Partial`, or `Full`
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub enum Relro {
     None,
     Partial,
