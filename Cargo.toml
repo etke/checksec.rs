@@ -48,8 +48,9 @@ path = "src/main.rs"
 
 [features]
 color = ["colored", "colored_json"]
-default = ["elf", "macho", "pe", "color"]
+default = ["elf", "macho", "pe", "color", "maps"]
 elf = ["shared"]
 macho = ["shared"]
+maps = []
 pe = []
 shared = []

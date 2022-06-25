@@ -12,12 +12,12 @@ use goblin::mach::Mach;
 use goblin::Object;
 use ignore::Walk;
 use memmap::Mmap;
-use serde_json::{json, to_string_pretty, Value};
+use serde_json::{json, to_string_pretty};
 use sysinfo::{
     PidExt, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
 };
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{env, fs, io, process};
 
 #[cfg(feature = "color")]
@@ -39,22 +39,81 @@ use checksec::output;
 use checksec::pe;
 use checksec::underline;
 
-fn json_print(data: &Value, settings: &output::Settings) {
-    if settings.pretty {
-        #[cfg(feature = "color")]
-        if settings.color {
-            if let Ok(colored_json) = to_colored_json_auto(data) {
-                println!("{}", colored_json);
+fn print_binary_results(binaries: &Binaries, settings: &output::Settings) {
+    match settings.format {
+        output::Format::Json => {
+            println!("{}", &json!(binaries));
+        }
+        output::Format::JsonPretty => {
+            #[cfg(feature = "color")]
+            if settings.color {
+                if let Ok(colored_json) =
+                    to_colored_json_auto(&json!(binaries))
+                {
+                    println!("{}", colored_json);
+                }
+            } else if let Ok(json_str) = to_string_pretty(&json!(binaries)) {
+                println!("{}", json_str);
             }
-        } else if let Ok(json_str) = to_string_pretty(data) {
-            println!("{}", json_str);
+            #[cfg(not(feature = "color"))]
+            if let Ok(json_str) = to_string_pretty(&json!(binaries)) {
+                println!("{}", json_str);
+            }
         }
-        #[cfg(not(feature = "color"))]
-        if let Ok(json_str) = to_string_pretty(data) {
-            println!("{}", json_str);
+        output::Format::Text => {
+            for binary in &binaries.binaries {
+                println!("{}", binary);
+            }
         }
-    } else {
-        println!("{}", data);
+    }
+}
+
+fn print_process_results(processes: &Processes, settings: &output::Settings) {
+    match settings.format {
+        output::Format::Json => {
+            println!("{}", &json!(processes));
+        }
+        output::Format::JsonPretty => {
+            #[cfg(feature = "color")]
+            if settings.color {
+                if let Ok(colored_json) =
+                    to_colored_json_auto(&json!(processes))
+                {
+                    println!("{}", colored_json);
+                }
+            } else if let Ok(json_str) = to_string_pretty(&json!(processes)) {
+                println!("{}", json_str);
+            }
+            #[cfg(not(feature = "color"))]
+            if let Ok(json_str) = to_string_pretty(&json!(processes)) {
+                println!("{}", json_str);
+            }
+        }
+        output::Format::Text => {
+            for process in &processes.processes {
+                for binary in &process.binary {
+                    if let Some(file_name) =
+                        PathBuf::from(&binary.file).file_name()
+                    {
+                        if let Some(name) = file_name.to_str() {
+                            println!(
+                                "{}({})\n \u{21aa} {}",
+                                name, process.pid, binary
+                            );
+                        }
+                    }
+                }
+                #[cfg(all(target_os = "linux", feature = "maps"))]
+                if settings.maps {
+                    if let Some(maps) = &process.maps {
+                        println!("{:>12}", "\u{21aa} Maps:");
+                        for map in maps {
+                            println!("\t{}", map);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -144,20 +203,12 @@ fn walk(basepath: &Path, settings: &output::Settings) {
         if let Some(filetype) = result.file_type() {
             if filetype.is_file() {
                 if let Ok(mut result) = parse(result.path()) {
-                    if settings.json {
-                        bins.append(&mut result);
-                    } else {
-                        for bin in &result {
-                            println!("{}", bin);
-                        }
-                    }
+                    bins.append(&mut result);
                 }
             }
         }
     }
-    if settings.json {
-        json_print(&json!(Binaries::new(bins)), settings);
-    }
+    print_binary_results(&Binaries::new(bins), settings);
 }
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
@@ -197,6 +248,14 @@ fn main() {
                 .help("Output in json format"),
         )
         .arg(
+            Arg::new("maps")
+                .short('m')
+                .long("maps")
+                .help("Include process memory maps (linux only)")
+                .requires("process")
+                .requires("process-all"),
+        )
+        .arg(
             Arg::new("no-color")
                 .long("no-color")
                 .help("Disables color output"),
@@ -224,8 +283,8 @@ fn main() {
                 .long("pid")
                 .value_name("PID")
                 .help(
-                    "Process ID of running process to check [multiple IDs
-                       can be specified separated by a comma]",
+                    "Process ID of running process to check\n\
+                    (comma separated for multiple PIDs)",
                 )
                 .takes_value(true)
                 .conflicts_with("directory")
@@ -251,11 +310,19 @@ fn main() {
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
 
+    let mut format = output::Format::Text;
+    if args.is_present("json") {
+        format = output::Format::Json;
+        if args.is_present("pretty") {
+            format = output::Format::JsonPretty;
+        }
+    }
+
     let settings = output::Settings::set(
         #[cfg(feature = "color")]
         !args.is_present("no-color"),
-        args.is_present("json"),
-        args.is_present("pretty"),
+        format,
+        args.is_present("maps"),
     );
 
     if procall {
@@ -266,27 +333,13 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
-                if settings.json {
-                    #[allow(clippy::cast_sign_loss)]
-                    procs.append(&mut vec![Process::new(
-                        pid.as_u32() as usize,
-                        results,
-                    )]);
-                } else {
-                    for result in &results {
-                        println!(
-                            "{}({})\n \u{21aa} {}",
-                            proc_entry.name(),
-                            pid,
-                            result
-                        );
-                    }
-                }
+                procs.append(&mut vec![Process::new(
+                    pid.as_u32() as usize,
+                    results,
+                )]);
             }
         }
-        if settings.json {
-            json_print(&json!(Processes::new(procs)), &settings);
-        }
+        print_process_results(&Processes::new(procs), &settings);
     } else if let Some(procids) = procids {
         let procids: Vec<sysinfo::Pid> = procids
             .split(',')
@@ -303,6 +356,7 @@ fn main() {
                 .with_processes(ProcessRefreshKind::new().with_cpu()),
         );
 
+        let mut procs: Vec<Process> = Vec::new();
         for procid in procids {
             let process = if let Some(process) = system.process(procid) {
                 process
@@ -323,25 +377,10 @@ fn main() {
 
             match parse(process.exe()) {
                 Ok(results) => {
-                    if settings.json {
-                        #[allow(clippy::cast_sign_loss)]
-                        json_print(
-                            &json!(Process::new(
-                                procid.as_u32() as usize,
-                                results
-                            )),
-                            &settings,
-                        );
-                    } else {
-                        for result in &results {
-                            println!(
-                                "{}({})\n \u{21aa} {}",
-                                process.name(),
-                                process.pid(),
-                                result
-                            );
-                        }
-                    }
+                    procs.append(&mut vec![Process::new(
+                        procid.as_u32() as usize,
+                        results,
+                    )]);
                 }
                 Err(msg) => {
                     eprintln!(
@@ -354,6 +393,7 @@ fn main() {
                 }
             }
         }
+        print_process_results(&Processes::new(procs), &settings);
     } else if let Some(procname) = procname {
         let system = System::new_with_specifics(
             RefreshKind::new()
@@ -363,31 +403,17 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for proc_entry in sysprocs {
             if let Ok(results) = parse(proc_entry.exe()) {
-                if settings.json {
-                    #[allow(clippy::cast_sign_loss)]
-                    procs.append(&mut vec![Process::new(
-                        proc_entry.pid().as_u32() as usize,
-                        results,
-                    )]);
-                } else {
-                    for result in &results {
-                        println!(
-                            "{}({})\n \u{21aa} {}",
-                            proc_entry.name(),
-                            proc_entry.pid(),
-                            result
-                        );
-                    }
-                }
+                procs.append(&mut vec![Process::new(
+                    proc_entry.pid().as_u32() as usize,
+                    results,
+                )]);
             }
         }
         if procs.is_empty() {
             eprintln!("No process found matching name {}", procname);
             process::exit(1);
         }
-        if settings.json {
-            json_print(&json!(Processes::new(procs)), &settings);
-        }
+        print_process_results(&Processes::new(procs), &settings);
     } else if let Some(directory) = directory {
         let directory_path = Path::new(directory);
 
@@ -407,17 +433,11 @@ fn main() {
 
         match parse(file_path) {
             Ok(results) => {
-                if settings.json {
-                    json_print(&json!(Binaries::new(results)), &settings);
-                } else {
-                    for result in &results {
-                        println!("{}", result);
-                    }
-                }
+                print_binary_results(&Binaries::new(results), &settings);
             }
             Err(msg) => {
                 eprintln!(
-                    "Can not parse binary file {}: {}",
+                    "Cannot parse binary file {}: {}",
                     underline!(file),
                     msg
                 );

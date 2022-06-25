@@ -49,9 +49,9 @@ pub mod elf;
 #[cfg(feature = "macho")]
 pub mod macho;
 pub mod macros;
+pub mod output;
 #[cfg(feature = "pe")]
 pub mod pe;
 #[cfg(feature = "shared")]
 #[macro_use]
 pub mod shared;
-pub mod output;
