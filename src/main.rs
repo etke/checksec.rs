@@ -26,10 +26,11 @@ use colored::Colorize;
 use colored_json::to_colored_json_auto;
 
 mod binary;
+mod proc;
 
-use binary::{
-    BinSpecificProperties, BinType, Binaries, Binary, Process, Processes,
-};
+use binary::{BinSpecificProperties, BinType, Binaries, Binary};
+use proc::{Process, Processes};
+
 #[cfg(feature = "elf")]
 use checksec::elf;
 #[cfg(feature = "macho")]
@@ -103,7 +104,10 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
                         }
                     }
                 }
-                #[cfg(all(target_os = "linux", feature = "maps"))]
+                #[cfg(all(
+                    feature = "maps",
+                    any(target_os = "linux", target_os = "windows")
+                ))]
                 if settings.maps {
                     if let Some(maps) = &process.maps {
                         println!("{:>12}", "\u{21aa} Maps:");
