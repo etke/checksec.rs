@@ -182,11 +182,11 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
                                     } else {
                                         BinType::MachO32
                                     };
-                                    fat_bins.append(&mut vec![Binary::new(
+                                    fat_bins.push(Binary::new(
                                         bin_type,
                                         file.display().to_string(),
                                         BinSpecificProperties::MachO(results),
-                                    )]);
+                                    ));
                                 }
                             }
                         }
@@ -326,10 +326,7 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
-                procs.append(&mut vec![Process::new(
-                    pid.as_u32() as usize,
-                    results,
-                )]);
+                procs.push(Process::new(pid.as_u32() as usize, results));
             }
         }
         print_process_results(&Processes::new(procs), &settings);
@@ -370,10 +367,8 @@ fn main() {
 
             match parse(process.exe()) {
                 Ok(results) => {
-                    procs.append(&mut vec![Process::new(
-                        procid.as_u32() as usize,
-                        results,
-                    )]);
+                    procs
+                        .push(Process::new(procid.as_u32() as usize, results));
                 }
                 Err(msg) => {
                     eprintln!(
@@ -396,10 +391,10 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for proc_entry in sysprocs {
             if let Ok(results) = parse(proc_entry.exe()) {
-                procs.append(&mut vec![Process::new(
+                procs.push(Process::new(
                     proc_entry.pid().as_u32() as usize,
                     results,
-                )]);
+                ));
             }
         }
         if procs.is_empty() {
