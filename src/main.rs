@@ -5,7 +5,9 @@ extern crate ignore;
 extern crate serde_json;
 extern crate sysinfo;
 
-use clap::{crate_authors, crate_description, crate_version, Arg, Command};
+use clap::{
+    crate_authors, crate_description, crate_version, Arg, ArgGroup, Command,
+};
 use goblin::error::Error;
 #[cfg(feature = "macho")]
 use goblin::mach::Mach;
@@ -227,11 +229,7 @@ fn main() {
                 .long("directory")
                 .value_name("DIRECTORY")
                 .help("Target directory")
-                .takes_value(true)
-                .conflicts_with("file")
-                .conflicts_with("pid")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
+                .takes_value(true),
         )
         .arg(
             Arg::new("file")
@@ -239,11 +237,7 @@ fn main() {
                 .long("file")
                 .value_name("FILE")
                 .help("Target file")
-                .takes_value(true)
-                .conflicts_with("directory")
-                .conflicts_with("pid")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
+                .takes_value(true),
         )
         .arg(
             Arg::new("json")
@@ -256,8 +250,10 @@ fn main() {
                 .short('m')
                 .long("maps")
                 .help("Include process memory maps (Linux only)")
+                .requires("pid")
                 .requires("process")
-                .requires("process-all"),
+                .requires("process-all")
+                .conflicts_with_all(&["directory", "file"]),
         )
         .arg(
             Arg::new("no-color")
@@ -272,11 +268,7 @@ fn main() {
                     "Process ID of running process to check\n\
                     (comma separated for multiple PIDs)",
                 )
-                .takes_value(true)
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
+                .takes_value(true),
         )
         .arg(
             Arg::new("pretty")
@@ -290,21 +282,18 @@ fn main() {
                 .long("process")
                 .value_name("NAME")
                 .help("Name of running process to check")
-                .takes_value(true)
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("pid")
-                .conflicts_with("process-all"),
+                .takes_value(true),
         )
         .arg(
             Arg::new("process-all")
                 .short('P')
                 .long("process-all")
-                .help("Check all running processes")
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("pid")
-                .conflicts_with("process"),
+                .help("Check all running processes"),
+        )
+        .group(
+            ArgGroup::new("operation")
+                .args(&["directory", "file", "pid", "process", "process-all"])
+                .required(true),
         )
         .get_matches();
 
