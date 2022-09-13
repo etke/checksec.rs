@@ -222,18 +222,6 @@ fn main() {
         .version(crate_version!())
         .arg_required_else_help(true)
         .arg(
-            Arg::new("file")
-                .short('f')
-                .long("file")
-                .value_name("FILE")
-                .help("Target file")
-                .takes_value(true)
-                .conflicts_with("directory")
-                .conflicts_with("pid")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
-        )
-        .arg(
             Arg::new("directory")
                 .short('d')
                 .long("directory")
@@ -241,6 +229,18 @@ fn main() {
                 .help("Target directory")
                 .takes_value(true)
                 .conflicts_with("file")
+                .conflicts_with("pid")
+                .conflicts_with("process")
+                .conflicts_with("process-all"),
+        )
+        .arg(
+            Arg::new("file")
+                .short('f')
+                .long("file")
+                .value_name("FILE")
+                .help("Target file")
+                .takes_value(true)
+                .conflicts_with("directory")
                 .conflicts_with("pid")
                 .conflicts_with("process")
                 .conflicts_with("process-all"),
@@ -255,7 +255,7 @@ fn main() {
             Arg::new("maps")
                 .short('m')
                 .long("maps")
-                .help("Include process memory maps (linux only)")
+                .help("Include process memory maps (Linux only)")
                 .requires("process")
                 .requires("process-all"),
         )
@@ -263,6 +263,20 @@ fn main() {
             Arg::new("no-color")
                 .long("no-color")
                 .help("Disables color output"),
+        )
+        .arg(
+            Arg::new("pid")
+                .long("pid")
+                .value_name("PID")
+                .help(
+                    "Process ID of running process to check\n\
+                    (comma separated for multiple PIDs)",
+                )
+                .takes_value(true)
+                .conflicts_with("directory")
+                .conflicts_with("file")
+                .conflicts_with("process")
+                .conflicts_with("process-all"),
         )
         .arg(
             Arg::new("pretty")
@@ -280,20 +294,6 @@ fn main() {
                 .conflicts_with("directory")
                 .conflicts_with("file")
                 .conflicts_with("pid")
-                .conflicts_with("process-all"),
-        )
-        .arg(
-            Arg::new("pid")
-                .long("pid")
-                .value_name("PID")
-                .help(
-                    "Process ID of running process to check\n\
-                    (comma separated for multiple PIDs)",
-                )
-                .takes_value(true)
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("process")
                 .conflicts_with("process-all"),
         )
         .arg(
