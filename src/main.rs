@@ -20,7 +20,7 @@ use sysinfo::{
 };
 
 use std::path::{Path, PathBuf};
-use std::{env, fs, io, process};
+use std::{env, fmt, fs, process};
 
 #[cfg(feature = "color")]
 use colored::Colorize;
@@ -123,84 +123,109 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
     }
 }
 
-fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
-    let fp = fs::File::open(file);
-    if let Err(err) = fp {
-        return Err(Error::IO(err));
-    }
-    if let Ok(buffer) = unsafe { Mmap::map(&fp.unwrap()) } {
-        match Object::parse(&buffer)? {
-            #[cfg(feature = "elf")]
-            Object::Elf(elf) => {
-                let results = elf::CheckSecResults::parse(&elf);
-                let bin_type =
-                    if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
-                return Ok(vec![Binary::new(
-                    bin_type,
-                    file.display().to_string(),
-                    BinSpecificProperties::Elf(results),
-                )]);
+enum ParseError {
+    Goblin(goblin::error::Error),
+    IO(std::io::Error),
+    Unimplemented(&'static str),
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Goblin(e) => e.fmt(f),
+            Self::IO(e) => e.fmt(f),
+            Self::Unimplemented(str) => {
+                write!(f, "Support for files of type {} not implemented", str)
             }
-            #[cfg(feature = "pe")]
-            Object::PE(pe) => {
-                let results = pe::CheckSecResults::parse(&pe, &buffer);
-                let bin_type =
-                    if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
-                return Ok(vec![Binary::new(
-                    bin_type,
-                    file.display().to_string(),
-                    BinSpecificProperties::PE(results),
-                )]);
-            }
-            #[cfg(feature = "macho")]
-            Object::Mach(mach) => match mach {
-                Mach::Binary(macho) => {
-                    let results = macho::CheckSecResults::parse(&macho);
-                    let bin_type = if macho.is_64 {
-                        BinType::MachO64
-                    } else {
-                        BinType::MachO32
-                    };
-                    return Ok(vec![Binary::new(
-                        bin_type,
-                        file.display().to_string(),
-                        BinSpecificProperties::MachO(results),
-                    )]);
-                }
-                Mach::Fat(fatmach) => {
-                    let mut fat_bins: Vec<Binary> = Vec::new();
-                    match fatmach.arches() {
-                        Ok(arches) => {
-                            for (idx, _) in arches.iter().enumerate() {
-                                if let Ok(container) = fatmach.get(idx) {
-                                    let results =
-                                        macho::CheckSecResults::parse(
-                                            &container,
-                                        );
-                                    let bin_type = if container.is_64 {
-                                        BinType::MachO64
-                                    } else {
-                                        BinType::MachO32
-                                    };
-                                    fat_bins.push(Binary::new(
-                                        bin_type,
-                                        file.display().to_string(),
-                                        BinSpecificProperties::MachO(results),
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            return Err(e);
-                        }
-                    }
-                    return Ok(fat_bins);
-                }
-            },
-            _ => return Err(Error::BadMagic(0)),
         }
     }
-    Err(Error::IO(io::Error::last_os_error()))
+}
+
+impl From<goblin::error::Error> for ParseError {
+    fn from(err: goblin::error::Error) -> ParseError {
+        ParseError::Goblin(err)
+    }
+}
+
+impl From<std::io::Error> for ParseError {
+    fn from(err: std::io::Error) -> ParseError {
+        ParseError::IO(err)
+    }
+}
+
+fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
+    let fp = fs::File::open(file)?;
+    let buffer = unsafe { Mmap::map(&fp)? };
+    match Object::parse(&buffer)? {
+        #[cfg(feature = "elf")]
+        Object::Elf(elf) => {
+            let results = elf::CheckSecResults::parse(&elf);
+            let bin_type =
+                if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
+            Ok(vec![Binary::new(
+                bin_type,
+                file.display().to_string(),
+                BinSpecificProperties::Elf(results),
+            )])
+        }
+        #[cfg(feature = "pe")]
+        Object::PE(pe) => {
+            let results = pe::CheckSecResults::parse(&pe, &buffer);
+            let bin_type =
+                if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
+            Ok(vec![Binary::new(
+                bin_type,
+                file.display().to_string(),
+                BinSpecificProperties::PE(results),
+            )])
+        }
+        #[cfg(feature = "macho")]
+        Object::Mach(mach) => match mach {
+            Mach::Binary(macho) => {
+                let results = macho::CheckSecResults::parse(&macho);
+                let bin_type = if macho.is_64 {
+                    BinType::MachO64
+                } else {
+                    BinType::MachO32
+                };
+                Ok(vec![Binary::new(
+                    bin_type,
+                    file.display().to_string(),
+                    BinSpecificProperties::MachO(results),
+                )])
+            }
+            Mach::Fat(fatmach) => {
+                let mut fat_bins: Vec<Binary> = Vec::new();
+                for (idx, _) in fatmach.arches()?.iter().enumerate() {
+                    if let Ok(container) = fatmach.get(idx) {
+                        let results =
+                            macho::CheckSecResults::parse(&container);
+                        let bin_type = if container.is_64 {
+                            BinType::MachO64
+                        } else {
+                            BinType::MachO32
+                        };
+                        fat_bins.push(Binary::new(
+                            bin_type,
+                            file.display().to_string(),
+                            BinSpecificProperties::MachO(results),
+                        ));
+                    }
+                }
+                Ok(fat_bins)
+            }
+        },
+        #[cfg(not(feature = "elf"))]
+        Object::Elf(_) => Err(ParseError::Unimplemented("ELF")),
+        #[cfg(not(feature = "pe"))]
+        Object::PE(_) => Err(ParseError::Unimplemented("PE")),
+        #[cfg(not(feature = "macho"))]
+        Object::Mach(_) => Err(ParseError::Unimplemented("MachO")),
+        Object::Archive(_) => Err(ParseError::Unimplemented("Unix Archive")),
+        Object::Unknown(magic) => {
+            Err(ParseError::Goblin(Error::BadMagic(magic)))
+        }
+    }
 }
 
 fn walk(basepath: &Path, settings: &output::Settings) {
