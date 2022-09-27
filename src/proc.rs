@@ -360,7 +360,10 @@ impl Process {
         match Process::parse_maps(pid) {
             Ok(maps) => Self { pid, binary, maps: Some(maps) },
             Err(e) => {
-                eprintln!("parse_maps Error: {}", e);
+                eprintln!(
+                    "Failed to parse maps for process with ID {}: {}",
+                    pid, e
+                );
                 Self { pid, binary, maps: None }
             }
         }
