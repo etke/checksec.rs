@@ -164,7 +164,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
                 if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
             Ok(vec![Binary::new(
                 bin_type,
-                file.display().to_string(),
+                file.to_path_buf(),
                 BinSpecificProperties::Elf(results),
             )])
         }
@@ -175,7 +175,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
                 if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
             Ok(vec![Binary::new(
                 bin_type,
-                file.display().to_string(),
+                file.to_path_buf(),
                 BinSpecificProperties::PE(results),
             )])
         }
@@ -190,7 +190,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
                 };
                 Ok(vec![Binary::new(
                     bin_type,
-                    file.display().to_string(),
+                    file.to_path_buf(),
                     BinSpecificProperties::MachO(results),
                 )])
             }
@@ -207,7 +207,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
                         };
                         fat_bins.push(Binary::new(
                             bin_type,
-                            file.display().to_string(),
+                            file.to_path_buf(),
                             BinSpecificProperties::MachO(results),
                         ));
                     }
