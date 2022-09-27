@@ -67,3 +67,6 @@ jobs:
         cargo clippy --all -- -D clippy::all -D clippy::pedantic
     - run: cargo build
     - run: cargo build --all-targets
+    - run: cargo build --no-default-features --features elf
+    - run: cargo build --no-default-features --features pe
+    - run: cargo build --no-default-features --features macho
