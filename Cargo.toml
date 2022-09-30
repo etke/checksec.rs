@@ -2,7 +2,7 @@
 name = "checksec"
 version = "0.0.9"
 authors = ["etke"]
-edition = "2018"
+edition = "2021"
 license = "Apache-2.0"
 description = "Fast multi-platform (ELF/PE/MachO) binary checksec command line utility and library."
 homepage = "https://crates.io/crates/checksec"
