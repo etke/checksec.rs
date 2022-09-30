@@ -5,13 +5,15 @@ extern crate ignore;
 extern crate serde_json;
 extern crate sysinfo;
 
-use clap::{crate_authors, crate_description, crate_version, Arg, Command};
+use clap::{
+    crate_authors, crate_description, crate_version, Arg, ArgAction, Command,
+};
 use goblin::error::Error;
 #[cfg(feature = "macho")]
 use goblin::mach::Mach;
 use goblin::Object;
 use ignore::Walk;
-use memmap::Mmap;
+use memmap2::Mmap;
 use serde_json::{json, to_string_pretty};
 use sysinfo::{
     PidExt, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
@@ -22,6 +24,7 @@ use std::{env, fs, io, process};
 
 #[cfg(feature = "color")]
 use colored::Colorize;
+
 #[cfg(feature = "color")]
 use colored_json::to_colored_json_auto;
 
@@ -227,7 +230,6 @@ fn main() {
                 .long("file")
                 .value_name("FILE")
                 .help("Target file")
-                .takes_value(true)
                 .conflicts_with("directory")
                 .conflicts_with("pid")
                 .conflicts_with("process")
@@ -239,7 +241,6 @@ fn main() {
                 .long("directory")
                 .value_name("DIRECTORY")
                 .help("Target directory")
-                .takes_value(true)
                 .conflicts_with("file")
                 .conflicts_with("pid")
                 .conflicts_with("process")
@@ -249,12 +250,14 @@ fn main() {
             Arg::new("json")
                 .short('j')
                 .long("json")
+                .action(ArgAction::SetTrue)
                 .help("Output in json format"),
         )
         .arg(
             Arg::new("maps")
                 .short('m')
                 .long("maps")
+                .action(ArgAction::SetTrue)
                 .help("Include process memory maps (linux only)")
                 .requires("process")
                 .requires("process-all"),
@@ -262,11 +265,13 @@ fn main() {
         .arg(
             Arg::new("no-color")
                 .long("no-color")
+                .action(ArgAction::SetTrue)
                 .help("Disables color output"),
         )
         .arg(
             Arg::new("pretty")
                 .long("pretty")
+                .action(ArgAction::SetTrue)
                 .help("Human readable json output")
                 .requires("json"),
         )
@@ -276,7 +281,6 @@ fn main() {
                 .long("process")
                 .value_name("NAME")
                 .help("Name of running process to check")
-                .takes_value(true)
                 .conflicts_with("directory")
                 .conflicts_with("file")
                 .conflicts_with("pid")
@@ -290,7 +294,6 @@ fn main() {
                     "Process ID of running process to check\n\
                     (comma separated for multiple PIDs)",
                 )
-                .takes_value(true)
                 .conflicts_with("directory")
                 .conflicts_with("file")
                 .conflicts_with("process")
@@ -300,6 +303,7 @@ fn main() {
             Arg::new("process-all")
                 .short('P')
                 .long("process-all")
+                .action(ArgAction::SetTrue)
                 .help("Check all running processes")
                 .conflicts_with("directory")
                 .conflicts_with("file")
@@ -308,25 +312,25 @@ fn main() {
         )
         .get_matches();
 
-    let file = args.value_of("file");
-    let directory = args.value_of("directory");
-    let procids = args.value_of("pid");
-    let procname = args.value_of("process");
-    let procall = args.is_present("process-all");
+    let file = args.get_one::<String>("file");
+    let directory = args.get_one::<String>("directory");
+    let procids = args.get_one::<String>("pid");
+    let procname = args.get_one::<String>("process");
+    let procall = args.get_flag("process-all");
 
     let mut format = output::Format::Text;
-    if args.is_present("json") {
+    if args.get_flag("json") {
         format = output::Format::Json;
-        if args.is_present("pretty") {
+        if args.get_flag("pretty") {
             format = output::Format::JsonPretty;
         }
     }
 
     let settings = output::Settings::set(
         #[cfg(feature = "color")]
-        !args.is_present("no-color"),
+        !args.get_flag("no-color"),
         format,
-        args.is_present("maps"),
+        args.get_flag("maps"),
     );
 
     if procall {
