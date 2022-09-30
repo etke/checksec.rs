@@ -201,6 +201,31 @@ fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
     Err(Error::IO(io::Error::last_os_error()))
 }
 
+#[cfg(feature = "async")]
+fn walk(basepath: &Path, settings: &output::Settings) {
+    let mut tasks = Vec::new();
+    for result in Walk::new(basepath).flatten() {
+        tasks.push(async_std::task::spawn(async move {
+            match result.file_type() {
+                Some(filetype) if filetype.is_file() => {
+                    parse(result.path()).ok()
+                }
+                _ => None,
+            }
+        }));
+    }
+
+    let mut bins: Vec<Binary> = Vec::new();
+    async_std::task::block_on(async {
+        for t in tasks {
+            if let Some(mut bin) = t.await {
+                bins.append(&mut bin);
+            }
+        }
+    });
+    print_binary_results(&Binaries::new(bins), settings);
+}
+#[cfg(not(feature = "async"))]
 fn walk(basepath: &Path, settings: &output::Settings) {
     let mut bins: Vec<Binary> = Vec::new();
     for result in Walk::new(basepath).flatten() {
@@ -214,6 +239,7 @@ fn walk(basepath: &Path, settings: &output::Settings) {
     }
     print_binary_results(&Binaries::new(bins), settings);
 }
+
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
     let args = Command::new("checksec")
@@ -334,16 +360,50 @@ fn main() {
             RefreshKind::new()
                 .with_processes(ProcessRefreshKind::new().with_cpu()),
         );
-        let mut procs: Vec<Process> = Vec::new();
-        for (pid, proc_entry) in system.processes() {
-            if let Ok(results) = parse(proc_entry.exe()) {
-                procs.append(&mut vec![Process::new(
-                    pid.as_u32() as usize,
-                    results,
-                )]);
+
+        #[cfg(feature = "async")]
+        {
+            let processes = system.processes();
+            let mut tasks = Vec::with_capacity(processes.len());
+
+            for (pid, proc_entry) in processes {
+                let pid = *pid;
+                let exe = proc_entry.exe().to_path_buf();
+                tasks.push(async_std::task::spawn(async move {
+                    match parse(&exe) {
+                        Ok(results) => {
+                            Some(Process::new(pid.as_u32() as usize, results))
+                        }
+                        Err(_) => None,
+                    }
+                }));
             }
+
+            drop(system);
+
+            let mut procs = Vec::with_capacity(tasks.len());
+            async_std::task::block_on(async {
+                for t in tasks {
+                    if let Some(processresult) = t.await {
+                        procs.push(processresult);
+                    }
+                }
+            });
+            print_process_results(&Processes::new(procs), &settings);
         }
-        print_process_results(&Processes::new(procs), &settings);
+        #[cfg(not(feature = "async"))]
+        {
+            let mut procs: Vec<Process> = Vec::new();
+            for (pid, proc_entry) in system.processes() {
+                if let Ok(results) = parse(proc_entry.exe()) {
+                    procs.append(&mut vec![Process::new(
+                        pid.as_u32() as usize,
+                        results,
+                    )]);
+                }
+            }
+            print_process_results(&Processes::new(procs), &settings);
+        }
     } else if let Some(procids) = procids {
         let procids: Vec<sysinfo::Pid> = procids
             .split(',')
