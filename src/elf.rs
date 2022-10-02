@@ -256,17 +256,18 @@ impl Properties for Elf<'_> {
         }
         false
     }
+    #[allow(clippy::case_sensitive_file_extension_comparisons)]
     fn has_clang_cfi(&self) -> bool {
         for sym in &self.syms {
             if let Some(name) = self.strtab.get_at(sym.st_name) {
-                if name.contains(".cfi") {
+                if name.ends_with(".cfi") {
                     return true;
                 }
             }
         }
         for sym in &self.dynsyms {
             if let Some(name) = self.dynstrtab.get_at(sym.st_name) {
-                if name.contains(".cfi") || name.contains("_cfi") {
+                if name.ends_with(".cfi") || name == "__cfi_init" {
                     return true;
                 }
             }
