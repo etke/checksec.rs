@@ -8,14 +8,20 @@ use goblin::elf::dynamic::{
 };
 use goblin::elf::header::ET_DYN;
 use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
+#[cfg(feature = "disassembly")]
+use goblin::elf::section_header::{SHF_ALLOC, SHF_EXECINSTR, SHT_PROGBITS};
 use goblin::elf::Elf;
 use serde_derive::{Deserialize, Serialize};
+#[cfg(feature = "disassembly")]
+use std::convert::TryFrom;
 use std::fmt;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "color")]
 use crate::colorize_bool;
+#[cfg(feature = "disassembly")]
+use crate::disassembly::{has_stack_clash_protection, Bitness};
 #[cfg(target_os = "linux")]
 use crate::ldso::{LdSoError, LdSoLookup};
 use crate::shared::{Rpath, VecRpath};
@@ -140,7 +146,7 @@ impl fmt::Display for Fortify {
 /// pub fn print_results(binary: &String) {
 ///     if let Ok(buf) = fs::read(binary) {
 ///         if let Ok(elf) = Elf::parse(&buf) {
-///             println!("{:#?}", CheckSecResults::parse(&elf));
+///             println!("{:#?}", CheckSecResults::parse(&elf, &buf));
 ///         }
 ///     }
 /// }
@@ -154,6 +160,8 @@ pub struct CheckSecResults {
     pub clang_cfi: bool,
     /// Clang SafeStack (*CFLAGS=*`-fsanitize=safe-stack`)
     pub clang_safestack: bool,
+    /// Stack Clash Protection (*CFLAGS=*`-fstack-clash-protection`)
+    pub stack_clash_protection: bool,
     /// Fortify (*CFLAGS=*`-D_FORTIFY_SOURCE`)
     pub fortify: Fortify,
     /// Fortified functions
@@ -175,7 +183,7 @@ pub struct CheckSecResults {
 }
 impl CheckSecResults {
     #[must_use]
-    pub fn parse(elf: &Elf) -> Self {
+    pub fn parse(elf: &Elf, bytes: &[u8]) -> Self {
         let (fortified, fortifiable) = elf.has_fortified();
         let fortify = match (fortified, fortifiable) {
             (1.., 0) => Fortify::Full,
@@ -190,6 +198,7 @@ impl CheckSecResults {
             fortify,
             fortified,
             fortifiable,
+            stack_clash_protection: elf.has_stack_clash_protection(bytes),
             nx: elf.has_nx(),
             pie: elf.has_pie(),
             relro: elf.has_relro(),
@@ -210,11 +219,12 @@ impl fmt::Display for CheckSecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Canary: {} CFI: {} SafeStack: {} Fortify: {} Fortified: {:2} \
+            "Canary: {} CFI: {} SafeStack: {} StackClash: {} Fortify: {} Fortified: {:2} \
             Fortifiable: {:2} NX: {} PIE: {} Relro: {} RPATH: {} RUNPATH: {}",
             self.canary,
             self.clang_cfi,
             self.clang_safestack,
+            self.stack_clash_protection,
             self.fortify,
             self.fortified,
             self.fortifiable,
@@ -230,13 +240,15 @@ impl fmt::Display for CheckSecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} {} {} {} {} {} {} {} {} {:2} {} {:2} {} {} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {} {} {:2} {} {:2} {} {} {} {} {} {} {} {} {} {}",
             "Canary:".bold(),
             colorize_bool!(self.canary),
             "CFI:".bold(),
             colorize_bool!(self.clang_cfi),
             "SafeStack:".bold(),
             colorize_bool!(self.clang_safestack),
+            "StackClash:".bold(),
+            colorize_bool!(self.stack_clash_protection),
             "Fortify:".bold(),
             self.fortify,
             "Fortified:".bold(),
@@ -282,6 +294,8 @@ pub trait Properties {
     fn has_clang_cfi(&self) -> bool;
     /// check for `__safestack_init` in dynstrtab
     fn has_clang_safestack(&self) -> bool;
+    /// checks for Stack Clash Protection
+    fn has_stack_clash_protection(&self, bytes: &[u8]) -> bool;
     /// check for symbols ending in `_chk` from dynstrtab
     fn has_fortify(&self) -> bool;
     /// counts fortified and fortifiable symbols from dynstrtab
@@ -432,6 +446,39 @@ impl Properties for Elf<'_> {
             }
         }
         false
+    }
+    #[allow(unused_variables)]
+    fn has_stack_clash_protection(&self, bytes: &[u8]) -> bool {
+        for sym in &self.syms {
+            if let Some(name) = self.strtab.get_at(sym.st_name) {
+                if name == "__rust_probestack" {
+                    return true;
+                }
+            }
+        }
+        #[cfg(not(feature = "disassembly"))]
+        return false;
+        #[cfg(feature = "disassembly")]
+        self.section_headers
+            .iter()
+            .filter(|sh| {
+                sh.sh_type == SHT_PROGBITS
+                    && sh.sh_flags & u64::from(SHF_EXECINSTR | SHF_ALLOC)
+                        == u64::from(SHF_EXECINSTR | SHF_ALLOC)
+            })
+            .any(|sh| {
+                if let Some(execbytes) = bytes.get(
+                    usize::try_from(sh.sh_offset).unwrap()
+                        ..usize::try_from(sh.sh_offset + sh.sh_size).unwrap(),
+                ) {
+                    let bitness =
+                        if self.is_64 { Bitness::B64 } else { Bitness::B32 };
+
+                    has_stack_clash_protection(execbytes, bitness, sh.sh_addr)
+                } else {
+                    false
+                }
+            })
     }
     fn has_fortify(&self) -> bool {
         for sym in &self.dynsyms {

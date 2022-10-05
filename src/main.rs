@@ -341,7 +341,7 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
     match Object::parse(bytes)? {
         #[cfg(feature = "elf")]
         Object::Elf(elf) => {
-            let results = elf::CheckSecResults::parse(&elf);
+            let results = elf::CheckSecResults::parse(&elf, bytes);
             let bin_type =
                 if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
             Ok(vec![Binary::new(
