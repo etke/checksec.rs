@@ -370,35 +370,31 @@ impl Process {
     }
     #[cfg(all(feature = "maps", target_os = "linux"))]
     pub fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, Error> {
-        let mut maps: Vec<MapEntry> = Vec::new();
-        if let Ok(maps_str) = fs::read_to_string(format!("/proc/{}/maps", pid))
+        let mut maps = Vec::new();
+        for line in fs::read_to_string(format!("/proc/{}/maps", pid))?.lines()
         {
-            for line in maps_str.lines() {
-                let mut split_line = line.split_whitespace();
-                let (start_str, end_str) = split_line
-                    .next()
-                    .ok_or(ErrorKind::InvalidData)?
-                    .split_once('-')
-                    .ok_or(ErrorKind::InvalidData)?;
-                let region = Region::new(
-                    usize::from_str_radix(start_str, 16).unwrap_or(0),
-                    usize::from_str_radix(end_str, 16).unwrap_or(0),
-                );
-                let flags = MapFlags::new(
-                    split_line.next().ok_or(ErrorKind::InvalidData)?,
-                );
-                split_line.next(); // skip offset
-                split_line.next(); // skip dev
-                split_line.next(); // skip inode
-                let pathname =
-                    Some(split_line.collect::<Vec<&str>>().join(" "))
-                        .filter(|x| !x.is_empty())
-                        .map(PathBuf::from);
-                maps.push(MapEntry { region, flags, pathname });
-            }
-            return Ok(maps);
+            let mut split_line = line.split_whitespace();
+            let (start_str, end_str) = split_line
+                .next()
+                .ok_or(ErrorKind::InvalidData)?
+                .split_once('-')
+                .ok_or(ErrorKind::InvalidData)?;
+            let region = Region::new(
+                usize::from_str_radix(start_str, 16).unwrap_or(0),
+                usize::from_str_radix(end_str, 16).unwrap_or(0),
+            );
+            let flags = MapFlags::new(
+                split_line.next().ok_or(ErrorKind::InvalidData)?,
+            );
+            split_line.next(); // skip offset
+            split_line.next(); // skip dev
+            split_line.next(); // skip inode
+            let pathname = Some(split_line.collect::<Vec<&str>>().join(" "))
+                .filter(|x| !x.is_empty())
+                .map(PathBuf::from);
+            maps.push(MapEntry { region, flags, pathname });
         }
-        Err(Error::last_os_error())
+        Ok(maps)
     }
 
     #[cfg(all(feature = "maps", target_os = "windows"))]
