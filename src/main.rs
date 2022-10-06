@@ -328,13 +328,15 @@ fn main() {
     let procname = args.value_of("process");
     let procall = args.is_present("process-all");
 
-    let mut format = output::Format::Text;
-    if args.is_present("json") {
-        format = output::Format::Json;
+    let format = if args.is_present("json") {
         if args.is_present("pretty") {
-            format = output::Format::JsonPretty;
+            output::Format::JsonPretty
+        } else {
+            output::Format::Json
         }
-    }
+    } else {
+        output::Format::Text
+    };
 
     let settings = output::Settings::set(
         #[cfg(feature = "color")]
