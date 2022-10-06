@@ -46,6 +46,8 @@
 
 #[cfg(feature = "elf")]
 pub mod elf;
+#[cfg(target_os = "linux")]
+pub mod ldso;
 #[cfg(feature = "macho")]
 pub mod macho;
 pub mod macros;

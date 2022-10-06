@@ -3,16 +3,17 @@
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::ops::Deref;
 
 /// Split contents of `DT_RPATH`/`DT_RUNPATH` or @rpath entries
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Rpath {
     None,
     Yes(String),
     YesRW(String),
 }
 /// wrapper for Vec<Rpath> to allow easy color output per path entry
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VecRpath {
     paths: Vec<Rpath>,
 }
@@ -20,6 +21,12 @@ impl VecRpath {
     #[must_use]
     pub fn new(v: Vec<Rpath>) -> Self {
         Self { paths: v }
+    }
+}
+impl Deref for VecRpath {
+    type Target = Vec<Rpath>;
+    fn deref(&self) -> &Self::Target {
+        &self.paths
     }
 }
 #[cfg(not(feature = "color"))]

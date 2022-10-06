@@ -26,3 +26,19 @@ macro_rules! underline {
         $str
     };
 }
+
+#[macro_export]
+#[cfg(feature = "color")]
+macro_rules! bold {
+    ($str:expr) => {
+        $str.bold()
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "color"))]
+macro_rules! bold {
+    ($str:expr) => {
+        $str
+    };
+}

@@ -340,30 +340,39 @@ impl WinProcInfo {
 #[derive(Deserialize, Serialize)]
 pub struct Process {
     pub pid: usize,
-    pub binary: Vec<Binary>,
+    pub binary: Binary,
     #[cfg(all(
         feature = "maps",
         any(target_os = "linux", target_os = "windows")
     ))]
     pub maps: Option<Vec<MapEntry>>,
+    pub libraries: Option<Vec<Binary>>,
 }
 impl Process {
     #[cfg(any(not(feature = "maps"), target_os = "macos"))]
-    pub fn new(pid: usize, binary: Vec<Binary>) -> Self {
-        Self { pid, binary }
+    pub fn new(
+        pid: usize,
+        binary: Binary,
+        libraries: Option<Vec<Binary>>,
+    ) -> Self {
+        Self { pid, binary, libraries }
     }
     #[cfg(all(
         feature = "maps",
         any(target_os = "linux", target_os = "windows")
     ))]
-    pub fn new(pid: usize, binary: Vec<Binary>) -> Self {
+    pub fn new(
+        pid: usize,
+        binary: Binary,
+        libraries: Option<Vec<Binary>>,
+    ) -> Self {
         match Process::parse_maps(pid) {
-            Ok(maps) => Self { pid, binary, maps: Some(maps) },
+            Ok(maps) => Self { pid, binary, maps: Some(maps), libraries },
             Err(e) => {
                 eprintln!(
                     "Failed to parse maps for process with ID {pid}: {e}"
                 );
-                Self { pid, binary, maps: None }
+                Self { pid, binary, maps: None, libraries }
             }
         }
     }
