@@ -1,6 +1,7 @@
 #[cfg(feature = "color")]
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{fmt, usize};
 
 #[cfg(feature = "elf")]
@@ -89,7 +90,7 @@ impl fmt::Display for BinSpecificProperties {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Binary {
     pub binarytype: BinType,
-    pub file: String,
+    pub file: PathBuf,
     pub properties: BinSpecificProperties,
 }
 #[cfg(not(feature = "color"))]
@@ -98,7 +99,9 @@ impl fmt::Display for Binary {
         write!(
             f,
             "{}: | {} | File: {}",
-            self.binarytype, self.properties, self.file
+            self.binarytype,
+            self.properties,
+            self.file.display()
         )
     }
 }
@@ -111,14 +114,14 @@ impl fmt::Display for Binary {
             self.binarytype,
             self.properties,
             "File:".bold().underline(),
-            self.file.bright_blue()
+            self.file.display().to_string().bright_blue()
         )
     }
 }
 impl Binary {
     pub const fn new(
         binarytype: BinType,
-        file: String,
+        file: PathBuf,
         properties: BinSpecificProperties,
     ) -> Self {
         Self { binarytype, file, properties }

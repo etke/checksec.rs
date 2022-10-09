@@ -6,7 +6,8 @@ extern crate serde_json;
 extern crate sysinfo;
 
 use clap::{
-    crate_authors, crate_description, crate_version, Arg, ArgAction, Command,
+    crate_authors, crate_description, crate_version, Arg, ArgAction, ArgGroup,
+    Command,
 };
 use goblin::error::Error;
 #[cfg(feature = "macho")]
@@ -20,7 +21,7 @@ use sysinfo::{
 };
 
 use std::path::{Path, PathBuf};
-use std::{env, fs, io, process};
+use std::{env, fmt, fs, process};
 
 #[cfg(feature = "color")]
 use colored::Colorize;
@@ -124,84 +125,109 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
     }
 }
 
-fn parse(file: &Path) -> Result<Vec<Binary>, Error> {
-    let fp = fs::File::open(file);
-    if let Err(err) = fp {
-        return Err(Error::IO(err));
-    }
-    if let Ok(buffer) = unsafe { Mmap::map(&fp.unwrap()) } {
-        match Object::parse(&buffer)? {
-            #[cfg(feature = "elf")]
-            Object::Elf(elf) => {
-                let results = elf::CheckSecResults::parse(&elf);
-                let bin_type =
-                    if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
-                return Ok(vec![Binary::new(
-                    bin_type,
-                    file.display().to_string(),
-                    BinSpecificProperties::Elf(results),
-                )]);
+enum ParseError {
+    Goblin(goblin::error::Error),
+    IO(std::io::Error),
+    Unimplemented(&'static str),
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Goblin(e) => e.fmt(f),
+            Self::IO(e) => e.fmt(f),
+            Self::Unimplemented(str) => {
+                write!(f, "Support for files of type {} not implemented", str)
             }
-            #[cfg(feature = "pe")]
-            Object::PE(pe) => {
-                let results = pe::CheckSecResults::parse(&pe, &buffer);
-                let bin_type =
-                    if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
-                return Ok(vec![Binary::new(
-                    bin_type,
-                    file.display().to_string(),
-                    BinSpecificProperties::PE(results),
-                )]);
-            }
-            #[cfg(feature = "macho")]
-            Object::Mach(mach) => match mach {
-                Mach::Binary(macho) => {
-                    let results = macho::CheckSecResults::parse(&macho);
-                    let bin_type = if macho.is_64 {
-                        BinType::MachO64
-                    } else {
-                        BinType::MachO32
-                    };
-                    return Ok(vec![Binary::new(
-                        bin_type,
-                        file.display().to_string(),
-                        BinSpecificProperties::MachO(results),
-                    )]);
-                }
-                Mach::Fat(fatmach) => {
-                    let mut fat_bins: Vec<Binary> = Vec::new();
-                    match fatmach.arches() {
-                        Ok(arches) => {
-                            for (idx, _) in arches.iter().enumerate() {
-                                if let Ok(container) = fatmach.get(idx) {
-                                    let results =
-                                        macho::CheckSecResults::parse(
-                                            &container,
-                                        );
-                                    let bin_type = if container.is_64 {
-                                        BinType::MachO64
-                                    } else {
-                                        BinType::MachO32
-                                    };
-                                    fat_bins.append(&mut vec![Binary::new(
-                                        bin_type,
-                                        file.display().to_string(),
-                                        BinSpecificProperties::MachO(results),
-                                    )]);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            return Err(e);
-                        }
-                    }
-                    return Ok(fat_bins);
-                }
-            },
-            _ => return Err(Error::BadMagic(0)),
         }
     }
-    Err(Error::IO(io::Error::last_os_error()))
+}
+
+impl From<goblin::error::Error> for ParseError {
+    fn from(err: goblin::error::Error) -> ParseError {
+        ParseError::Goblin(err)
+    }
+}
+
+impl From<std::io::Error> for ParseError {
+    fn from(err: std::io::Error) -> ParseError {
+        ParseError::IO(err)
+    }
+}
+
+fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
+    let fp = fs::File::open(file)?;
+    let buffer = unsafe { Mmap::map(&fp)? };
+    match Object::parse(&buffer)? {
+        #[cfg(feature = "elf")]
+        Object::Elf(elf) => {
+            let results = elf::CheckSecResults::parse(&elf);
+            let bin_type =
+                if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
+            Ok(vec![Binary::new(
+                bin_type,
+                file.to_path_buf(),
+                BinSpecificProperties::Elf(results),
+            )])
+        }
+        #[cfg(feature = "pe")]
+        Object::PE(pe) => {
+            let results = pe::CheckSecResults::parse(&pe, &buffer);
+            let bin_type =
+                if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
+            Ok(vec![Binary::new(
+                bin_type,
+                file.to_path_buf(),
+                BinSpecificProperties::PE(results),
+            )])
+        }
+        #[cfg(feature = "macho")]
+        Object::Mach(mach) => match mach {
+            Mach::Binary(macho) => {
+                let results = macho::CheckSecResults::parse(&macho);
+                let bin_type = if macho.is_64 {
+                    BinType::MachO64
+                } else {
+                    BinType::MachO32
+                };
+                Ok(vec![Binary::new(
+                    bin_type,
+                    file.to_path_buf(),
+                    BinSpecificProperties::MachO(results),
+                )])
+            }
+            Mach::Fat(fatmach) => {
+                let mut fat_bins: Vec<Binary> = Vec::new();
+                for (idx, _) in fatmach.arches()?.iter().enumerate() {
+                    if let Ok(container) = fatmach.get(idx) {
+                        let results =
+                            macho::CheckSecResults::parse(&container);
+                        let bin_type = if container.is_64 {
+                            BinType::MachO64
+                        } else {
+                            BinType::MachO32
+                        };
+                        fat_bins.push(Binary::new(
+                            bin_type,
+                            file.to_path_buf(),
+                            BinSpecificProperties::MachO(results),
+                        ));
+                    }
+                }
+                Ok(fat_bins)
+            }
+        },
+        #[cfg(not(feature = "elf"))]
+        Object::Elf(_) => Err(ParseError::Unimplemented("ELF")),
+        #[cfg(not(feature = "pe"))]
+        Object::PE(_) => Err(ParseError::Unimplemented("PE")),
+        #[cfg(not(feature = "macho"))]
+        Object::Mach(_) => Err(ParseError::Unimplemented("MachO")),
+        Object::Archive(_) => Err(ParseError::Unimplemented("Unix Archive")),
+        Object::Unknown(magic) => {
+            Err(ParseError::Goblin(Error::BadMagic(magic)))
+        }
+    }
 }
 
 fn walk(basepath: &Path, settings: &output::Settings) {
@@ -229,22 +255,14 @@ fn main() {
                 .short('f')
                 .long("file")
                 .value_name("FILE")
-                .help("Target file")
-                .conflicts_with("directory")
-                .conflicts_with("pid")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
+                .help("Target file"),
         )
         .arg(
             Arg::new("directory")
                 .short('d')
                 .long("directory")
                 .value_name("DIRECTORY")
-                .help("Target directory")
-                .conflicts_with("file")
-                .conflicts_with("pid")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
+                .help("Target directory"),
         )
         .arg(
             Arg::new("json")
@@ -260,7 +278,8 @@ fn main() {
                 .action(ArgAction::SetTrue)
                 .help("Include process memory maps (linux only)")
                 .requires("process")
-                .requires("process-all"),
+                .requires("process-all")
+                .conflicts_with_all(&["directory", "file"]),
         )
         .arg(
             Arg::new("no-color")
@@ -280,35 +299,23 @@ fn main() {
                 .short('p')
                 .long("process")
                 .value_name("NAME")
-                .help("Name of running process to check")
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("pid")
-                .conflicts_with("process-all"),
+                .help("Name of running process to check"),
         )
-        .arg(
-            Arg::new("pid")
-                .long("pid")
-                .value_name("PID")
-                .help(
-                    "Process ID of running process to check\n\
+        .arg(Arg::new("pid").long("pid").value_name("PID").help(
+            "Process ID of running process to check\n\
                     (comma separated for multiple PIDs)",
-                )
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("process")
-                .conflicts_with("process-all"),
-        )
+        ))
         .arg(
             Arg::new("process-all")
                 .short('P')
                 .long("process-all")
                 .action(ArgAction::SetTrue)
-                .help("Check all running processes")
-                .conflicts_with("directory")
-                .conflicts_with("file")
-                .conflicts_with("pid")
-                .conflicts_with("process"),
+                .help("Check all running processes"),
+        )
+        .group(
+            ArgGroup::new("operation")
+                .args(&["directory", "file", "pid", "process", "process-all"])
+                .required(true),
         )
         .get_matches();
 
@@ -318,13 +325,13 @@ fn main() {
     let procname = args.get_one::<String>("process");
     let procall = args.get_flag("process-all");
 
-    let mut format = output::Format::Text;
-    if args.get_flag("json") {
-        format = output::Format::Json;
-        if args.get_flag("pretty") {
-            format = output::Format::JsonPretty;
-        }
-    }
+    let format = if args.get_flag("json") {
+        output::Format::Json
+    } else if args.get_flag("pretty") {
+        output::Format::JsonPretty
+    } else {
+        output::Format::Text
+    };
 
     let settings = output::Settings::set(
         #[cfg(feature = "color")]
@@ -341,10 +348,7 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for (pid, proc_entry) in system.processes() {
             if let Ok(results) = parse(proc_entry.exe()) {
-                procs.append(&mut vec![Process::new(
-                    pid.as_u32() as usize,
-                    results,
-                )]);
+                procs.push(Process::new(pid.as_u32() as usize, results));
             }
         }
         print_process_results(&Processes::new(procs), &settings);
@@ -385,10 +389,8 @@ fn main() {
 
             match parse(process.exe()) {
                 Ok(results) => {
-                    procs.append(&mut vec![Process::new(
-                        procid.as_u32() as usize,
-                        results,
-                    )]);
+                    procs
+                        .push(Process::new(procid.as_u32() as usize, results));
                 }
                 Err(msg) => {
                     eprintln!(
@@ -411,10 +413,10 @@ fn main() {
         let mut procs: Vec<Process> = Vec::new();
         for proc_entry in sysprocs {
             if let Ok(results) = parse(proc_entry.exe()) {
-                procs.append(&mut vec![Process::new(
+                procs.push(Process::new(
                     proc_entry.pid().as_u32() as usize,
                     results,
-                )]);
+                ));
             }
         }
         if procs.is_empty() {
