@@ -277,6 +277,7 @@ fn main() {
                 .long("maps")
                 .action(ArgAction::SetTrue)
                 .help("Include process memory maps (linux only)")
+                .requires("pid")
                 .requires("process")
                 .requires("process-all")
                 .conflicts_with_all(&["directory", "file"]),
@@ -326,9 +327,11 @@ fn main() {
     let procall = args.get_flag("process-all");
 
     let format = if args.get_flag("json") {
-        output::Format::Json
-    } else if args.get_flag("pretty") {
-        output::Format::JsonPretty
+        if args.get_flag("pretty") {
+            output::Format::JsonPretty
+        } else {
+            output::Format::Json
+        }
     } else {
         output::Format::Text
     };
