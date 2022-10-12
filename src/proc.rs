@@ -486,7 +486,7 @@ fn set_debug_privilege() -> Result<(), Error> {
             .collect();
         if unsafe {
             LookupPrivilegeValueW(
-                PCWSTR::default(),
+                PCWSTR::null(),
                 PCWSTR(wprivstr.as_ptr()),
                 &mut luid,
             )
@@ -505,10 +505,10 @@ fn set_debug_privilege() -> Result<(), Error> {
                 AdjustTokenPrivileges(
                     htoken,
                     false,
-                    &tkp,
+                    Some(&tkp),
                     mem::size_of::<TOKEN_PRIVILEGES>() as u32,
-                    &mut TOKEN_PRIVILEGES::default(),
-                    &mut 0_u32,
+                    Some(&mut TOKEN_PRIVILEGES::default()),
+                    Some(&mut 0_u32),
                 )
             }
             .as_bool()
@@ -552,7 +552,7 @@ fn fetch_modules(
         let retsize = unsafe {
             VirtualQueryEx(
                 proc.hprocess,
-                region.start as *const c_void,
+                Some(region.start as *const c_void),
                 &mut lpbuffer,
                 size,
             )
@@ -602,7 +602,7 @@ fn fetch_heaps(
             let _ = unsafe {
                 VirtualQueryEx(
                     proc.hprocess,
-                    lphl.th32HeapID as *const std::ffi::c_void,
+                    Some(lphl.th32HeapID as *const std::ffi::c_void),
                     &mut lpbuffer,
                     mem::size_of::<MEMORY_BASIC_INFORMATION>(),
                 )
@@ -631,7 +631,7 @@ fn fetch_heaps(
                 let retsize = unsafe {
                     VirtualQueryEx(
                         proc.hprocess,
-                        region.start as *const c_void,
+                        Some(region.start as *const c_void),
                         &mut lpbuffer,
                         size,
                     )
@@ -716,7 +716,7 @@ fn fetch_stacks(
                         let _ = unsafe {
                             VirtualQueryEx(
                                 proc.hprocess,
-                                sp as *const c_void,
+                                Some(sp as *const c_void),
                                 &mut lpbuffer,
                                 mem::size_of::<MEMORY_BASIC_INFORMATION>(),
                             )

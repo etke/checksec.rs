@@ -1,45 +1,53 @@
 [package]
-name = "checksec"
-version = "0.0.9"
 authors = ["etke"]
-edition = "2021"
-license = "Apache-2.0"
-description = "Fast multi-platform (ELF/PE/MachO) binary checksec command line utility and library."
-homepage = "https://crates.io/crates/checksec"
-repository = "https://github.com/etke/checksec.rs"
-documentation = "https://docs.rs/checksec"
-keywords = ["checksec", "binary", "security"]
 categories = ["command-line-utilities"]
+description = "Fast multi-platform (ELF/PE/MachO) binary checksec command line utility and library."
+documentation = "https://docs.rs/checksec"
+edition = "2021"
+homepage = "https://crates.io/crates/checksec"
 include = [
-    "src/*.rs",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE"
+  "src/*.rs",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE",
 ]
+keywords = ["checksec", "binary", "security"]
+license = "Apache-2.0"
+name = "checksec"
 readme = "README.md"
+repository = "https://github.com/etke/checksec.rs"
+version = "0.0.9"
 
 [profile.release]
-codegen-units = 1   # Reduce number of codegen units to increase optimizations
-lto = true          # Enable Link Time Optimization
-opt-level = 'z'     # Optimize for size
-panic = 'abort'     # Abort on panic
+codegen-units = 1 # Reduce number of codegen units to increase optimizations
+lto = true # Enable Link Time Optimization
+opt-level = 'z' # Optimize for size
+panic = 'abort' # Abort on panic
 
 [dependencies]
-clap = { version = "4.0.4", features = ["cargo"] }
-colored = { version = "2.0.0", optional = true }
-colored_json = { version = "3.0.1", optional = true }
+clap = {version = "4.0.13", features = ["cargo"]}
+colored = {version = "2.0.0", optional = true}
+colored_json = {version = "3.0.1", optional = true}
 goblin = "0.5.4"
 ignore = "0.4.18"
 memmap2 = "0.5.7"
 scroll = "0.11.0"
 scroll_derive = "0.11.0"
-serde = { version = "1.0.145", features = ["derive"] }
+serde = {version = "1.0.145", features = ["derive"]}
 serde_derive = "1.0.145"
-serde_json = "1.0.85"
+serde_json = "1.0.86"
 sysinfo = "0.26.4"
 
 [target.'cfg(target_os="windows")'.dependencies]
-windows = { version = "0.42.0", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Kernel", "Win32_System_Memory", "Win32_System_Threading"] }
+windows = {version = "0.42.0", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Kernel",
+  "Win32_System_Memory",
+  "Win32_System_Threading",
+]}
 
 [lib]
 name = "checksec"
