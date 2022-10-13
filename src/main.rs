@@ -251,18 +251,18 @@ fn main() {
         .version(crate_version!())
         .arg_required_else_help(true)
         .arg(
-            Arg::new("file")
-                .short('f')
-                .long("file")
-                .value_name("FILE")
-                .help("Target file"),
-        )
-        .arg(
             Arg::new("directory")
                 .short('d')
                 .long("directory")
                 .value_name("DIRECTORY")
                 .help("Target directory"),
+        )
+        .arg(
+            Arg::new("file")
+                .short('f')
+                .long("file")
+                .value_name("FILE")
+                .help("Target file"),
         )
         .arg(
             Arg::new("json")
@@ -289,6 +289,15 @@ fn main() {
                 .help("Disables color output"),
         )
         .arg(
+            Arg::new("pid")
+                .help(
+                    "Process ID of running process to check\n\
+                    (comma separated for multiple PIDs)",
+                )
+                .long("pid")
+                .value_name("PID"),
+        )
+        .arg(
             Arg::new("pretty")
                 .long("pretty")
                 .action(ArgAction::SetTrue)
@@ -301,15 +310,6 @@ fn main() {
                 .long("process")
                 .value_name("NAME")
                 .help("Name of running process to check"),
-        )
-        .arg(
-            Arg::new("pid")
-                .help(
-                    "Process ID of running process to check\n\
-                    (comma separated for multiple PIDs)",
-                )
-                .long("pid")
-                .value_name("PID"),
         )
         .arg(
             Arg::new("process-all")
