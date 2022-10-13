@@ -302,10 +302,15 @@ fn main() {
                 .value_name("NAME")
                 .help("Name of running process to check"),
         )
-        .arg(Arg::new("pid").long("pid").value_name("PID").help(
-            "Process ID of running process to check\n\
+        .arg(
+            Arg::new("pid")
+                .help(
+                    "Process ID of running process to check\n\
                     (comma separated for multiple PIDs)",
-        ))
+                )
+                .long("pid")
+                .value_name("PID"),
+        )
         .arg(
             Arg::new("process-all")
                 .short('P')
