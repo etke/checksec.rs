@@ -1,10 +1,10 @@
 extern crate checksec;
 extern crate goblin;
-extern crate memmap;
+extern crate memmap2;
 
 use checksec::pe::CheckSecResults;
 use goblin::Object;
-use memmap::Mmap;
+use memmap2::Mmap;
 use std::{env, fs};
 
 fn main() {
