@@ -22,6 +22,7 @@ use sysinfo::{
 };
 
 use std::ffi::OsStr;
+use std::io::{self, BufRead};
 use std::path::Path;
 use std::{env, fmt, fs, process};
 
@@ -300,6 +301,14 @@ fn main() {
                 .help("Target file"),
         )
         .arg(
+            Arg::new("file-list")
+                .long("file-list")
+                .value_name("FILELIST")
+                .default_missing_value("<stdin>")
+                .num_args(0..=1)
+                .help("List of target files.  Read from standard input if no value specified."),
+        )
+        .arg(
             Arg::new("json")
                 .short('j')
                 .long("json")
@@ -355,12 +364,20 @@ fn main() {
         )
         .group(
             ArgGroup::new("operation")
-                .args(&["directory", "file", "pid", "process", "process-all"])
+                .args(&[
+                    "directory",
+                    "file",
+                    "file-list",
+                    "pid",
+                    "process",
+                    "process-all",
+                ])
                 .required(true),
         )
         .get_matches();
 
     let file = args.get_one::<String>("file");
+    let filelist = args.get_one::<String>("file-list");
     let directory = args.get_one::<String>("directory");
     let procids = args.get_one::<String>("pid");
     let procname = args.get_one::<String>("process");
@@ -497,5 +514,39 @@ fn main() {
                 process::exit(1);
             }
         }
+    } else if let Some(filelist) = filelist {
+        let results = if filelist == "<stdin>" {
+            io::stdin()
+                .lock()
+                .lines()
+                .map(|line| {
+                    line.expect("Cannot read line from standard input")
+                })
+                .filter_map(|file| {
+                    let path = Path::new(&file);
+                    if path.is_file() {
+                        parse(path).ok()
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .collect()
+        } else {
+            filelist
+                .split(char::is_control)
+                .filter_map(|file| {
+                    let path = Path::new(file);
+                    if path.is_file() {
+                        parse(path).ok()
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .collect()
+        };
+
+        print_binary_results(&Binaries::new(results), &settings);
     }
 }
