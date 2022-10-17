@@ -8,7 +8,7 @@ extern crate sysinfo;
 
 use clap::{
     crate_authors, crate_description, crate_version, Arg, ArgAction, ArgGroup,
-    Command,
+    Command, ValueHint,
 };
 use goblin::error::Error;
 #[cfg(feature = "macho")]
@@ -266,8 +266,8 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
     }
 }
 
-fn walk(basepath: &Path, settings: &output::Settings) {
-    let mut bins: Vec<Binary> = Vec::new();
+fn walk(basepath: &Path) -> Vec<Binary> {
+    let mut bins = Vec::new();
     for result in Walk::new(basepath).flatten() {
         if let Some(filetype) = result.file_type() {
             if filetype.is_file() {
@@ -277,7 +277,7 @@ fn walk(basepath: &Path, settings: &output::Settings) {
             }
         }
     }
-    print_binary_results(&Binaries::new(bins), settings);
+    bins
 }
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
@@ -290,14 +290,18 @@ fn main() {
             Arg::new("directory")
                 .short('d')
                 .long("directory")
+                .action(clap::ArgAction::Append)
                 .value_name("DIRECTORY")
+                .value_hint(ValueHint::DirPath)
                 .help("Target directory"),
         )
         .arg(
             Arg::new("file")
                 .short('f')
                 .long("file")
+                .action(clap::ArgAction::Append)
                 .value_name("FILE")
+                .value_hint(ValueHint::FilePath)
                 .help("Target file"),
         )
         .arg(
@@ -352,6 +356,7 @@ fn main() {
             Arg::new("process")
                 .short('p')
                 .long("process")
+                .action(clap::ArgAction::Append)
                 .value_name("NAME")
                 .help("Name of running process to check"),
         )
@@ -376,11 +381,11 @@ fn main() {
         )
         .get_matches();
 
-    let file = args.get_one::<String>("file");
+    let files = args.get_many::<String>("file");
     let filelist = args.get_one::<String>("file-list");
-    let directory = args.get_one::<String>("directory");
+    let directories = args.get_many::<String>("directory");
     let procids = args.get_one::<String>("pid");
-    let procname = args.get_one::<String>("process");
+    let procnames = args.get_many::<String>("process");
     let procall = args.get_flag("process-all");
 
     let format = if args.get_flag("json") {
@@ -464,56 +469,68 @@ fn main() {
             }
         }
         print_process_results(&Processes::new(procs), &settings);
-    } else if let Some(procname) = procname {
+    } else if let Some(procnames) = procnames {
         let system = System::new_with_specifics(
             RefreshKind::new()
                 .with_processes(ProcessRefreshKind::new().with_cpu()),
         );
-        let sysprocs = system.processes_by_name(procname);
-        let mut procs: Vec<Process> = Vec::new();
-        for proc_entry in sysprocs {
-            if let Ok(results) = parse(proc_entry.exe()) {
-                procs.push(Process::new(
+
+        let procs = procnames
+            .flat_map(|procname| system.processes_by_name(procname))
+            .filter_map(|proc_entry| match parse(proc_entry.exe()) {
+                Ok(results) => Some(Process::new(
                     proc_entry.pid().as_u32() as usize,
                     results,
-                ));
-            }
-        }
+                )),
+                Err(_) => None,
+            })
+            .collect::<Vec<Process>>();
+
         if procs.is_empty() {
-            eprintln!("No process found matching name {}", procname);
+            eprintln!("No process found");
             process::exit(1);
         }
         print_process_results(&Processes::new(procs), &settings);
-    } else if let Some(directory) = directory {
-        let directory_path = Path::new(directory);
+    } else if let Some(directories) = directories {
+        let mut results = Vec::new();
 
-        if !directory_path.is_dir() {
-            eprintln!("Directory {} not found", underline!(directory));
-            process::exit(1);
-        }
+        for directory in directories {
+            let directory_path = Path::new(directory);
 
-        walk(directory_path, &settings);
-    } else if let Some(file) = file {
-        let file_path = Path::new(file);
-
-        if !file_path.is_file() {
-            eprintln!("File {} not found", underline!(file));
-            process::exit(1);
-        }
-
-        match parse(file_path) {
-            Ok(results) => {
-                print_binary_results(&Binaries::new(results), &settings);
-            }
-            Err(msg) => {
-                eprintln!(
-                    "Cannot parse binary file {}: {}",
-                    underline!(file),
-                    msg
-                );
+            if !directory_path.is_dir() {
+                eprintln!("Directory {} not found", underline!(directory));
                 process::exit(1);
             }
+
+            results.append(&mut walk(directory_path));
         }
+
+        print_binary_results(&Binaries::new(results), &settings);
+    } else if let Some(files) = files {
+        let mut results = Vec::new();
+
+        for file in files {
+            let file_path = Path::new(file);
+
+            if !file_path.is_file() {
+                eprintln!("File {} not found", underline!(file));
+                process::exit(1);
+            }
+
+            match parse(file_path) {
+                Ok(mut result) => results.append(&mut result),
+                Err(msg) => {
+                    eprintln!(
+                        "Cannot parse binary file {}: {}",
+                        underline!(file),
+                        msg
+                    );
+                    process::exit(1);
+                }
+            }
+        }
+
+        print_binary_results(&Binaries::new(results), &settings);
     } else if let Some(filelist) = filelist {
         let results = if filelist == "<stdin>" {
             io::stdin()
