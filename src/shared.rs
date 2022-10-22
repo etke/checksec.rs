@@ -32,8 +32,7 @@ impl fmt::Display for VecRpath {
                 Rpath::None => s.push("None".to_string()),
             }
         }
-        write!(f, "{}", s.join(":"))?;
-        Ok(())
+        write!(f, "{}", s.join(":"))
     }
 }
 #[cfg(feature = "color")]
@@ -46,7 +45,6 @@ impl fmt::Display for VecRpath {
                 Rpath::None => s.push("None".green().to_string()),
             }
         }
-        write!(f, "{}", s.join(":"))?;
-        Ok(())
+        write!(f, "{}", s.join(":"))
     }
 }
