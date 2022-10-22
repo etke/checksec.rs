@@ -287,7 +287,7 @@ pub trait Properties {
     /// `VecRpath`
     fn has_runpath(&self) -> VecRpath;
     /// return the corresponding string from dynstrtab for a given `d_tag`
-    fn get_dynstr_by_tag(&self, tag: u64) -> Option<String>;
+    fn get_dynstr_by_tag(&self, tag: u64) -> Option<&str>;
 }
 
 // readelf -s -W /lib/x86_64-linux-gnu/libc.so.6 | grep _chk
@@ -523,7 +523,7 @@ impl Properties for Elf<'_> {
         }
         VecRpath::new(vec![Rpath::None])
     }
-    fn get_dynstr_by_tag(&self, tag: u64) -> Option<String> {
+    fn get_dynstr_by_tag(&self, tag: u64) -> Option<&str> {
         if let Some(dynamic) = &self.dynamic {
             for dynamic in &dynamic.dyns {
                 if dynamic.d_tag == tag {
@@ -531,7 +531,7 @@ impl Properties for Elf<'_> {
                     if let Some(name) =
                         self.dynstrtab.get_at(dynamic.d_val as usize)
                     {
-                        return Some(name.to_string());
+                        return Some(name);
                     }
                 }
             }
