@@ -7,7 +7,6 @@ use goblin::pe::{
     data_directories::DataDirectory, options::ParseOptions,
     section_table::SectionTable,
 };
-use memmap2::Mmap;
 use scroll::Pread;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -327,7 +326,7 @@ pub struct CheckSecResults {
 }
 impl CheckSecResults {
     #[must_use]
-    pub fn parse(pe: &PE, buffer: &Mmap) -> Self {
+    pub fn parse(pe: &PE, buffer: &[u8]) -> Self {
         Self {
             aslr: pe.has_aslr(),
             authenticode: pe.has_authenticode(buffer),
@@ -446,7 +445,7 @@ pub trait Properties {
     /// [`memmap2::Mmap`](https://docs.rs/memmap2/0.5.7/memmap2/struct.Mmap.html)
     /// of the original file to read & parse required information from the
     /// underlying binary file
-    fn has_authenticode(&self, mem: &memmap2::Mmap) -> bool;
+    fn has_authenticode(&self, bytes: &[u8]) -> bool;
     /// check for `IMAGE_DLLCHARACTERISTICS_GUARD_CF` *(0x4000)* in
     /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_cfg(&self) -> bool;
@@ -470,7 +469,7 @@ pub trait Properties {
     /// [`memmap2::Mmap`](https://docs.rs/memmap2/0.5.7/memmap2/struct.Mmap.html)
     /// of the original file to read & parse required information from the
     /// underlying binary file
-    fn has_gs(&self, mem: &memmap2::Mmap) -> bool;
+    fn has_gs(&self, bytes: &[u8]) -> bool;
     /// check for `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(`0x0020`)* in
     /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
     fn has_high_entropy_va(&self) -> bool;
@@ -486,7 +485,7 @@ pub trait Properties {
     /// [`memmap2::Mmap`](https://docs.rs/memmap2/0.5.7/memmap2/struct.Mmap.html)
     /// of the original file to read & parse required information from the
     /// underlying binary file
-    fn has_rfg(&self, mem: &memmap2::Mmap) -> bool;
+    fn has_rfg(&self, bytes: &[u8]) -> bool;
     /// check `shandler_count` from `LOAD_CONFIG` in `IMAGE_DATA_DIRECTORY`
     /// linked from the the `IMAGE_OPTIONAL_HEADER32/64`
     ///
@@ -494,7 +493,7 @@ pub trait Properties {
     /// [`memmap2::Mmap`](https://docs.rs/memmap2/0.5.7/memmap2/struct.Mmap.html)
     /// of the original file to read and parse required information from the
     /// underlying binary file
-    fn has_safe_seh(&self, mem: &memmap2::Mmap) -> bool;
+    fn has_safe_seh(&self, bytes: &[u8]) -> bool;
     /// check `IMAGE_DLLCHARACTERISTICS_NO_SEH` from the
     /// `IMAGE_OPTIONAL_HEADER32/64`
     fn has_seh(&self) -> bool;
@@ -508,7 +507,7 @@ impl Properties for PE<'_> {
         }
         ASLR::None
     }
-    fn has_authenticode(&self, mem: &memmap2::Mmap) -> bool {
+    fn has_authenticode(&self, bytes: &[u8]) -> bool {
         // requires running platform to be Windows for verification
         // just check for existence right now
         if let Some(optional_header) = self.header.optional_header {
@@ -518,7 +517,7 @@ impl Properties for PE<'_> {
                 optional_header.data_directories.get_load_config_table()
             {
                 if let Ok(load_config_val) = get_load_config_val(
-                    mem,
+                    bytes,
                     *load_config_hdr,
                     sections,
                     file_alignment,
@@ -591,7 +590,7 @@ impl Properties for PE<'_> {
         }
         false
     }
-    fn has_gs(&self, mem: &memmap2::Mmap) -> bool {
+    fn has_gs(&self, bytes: &[u8]) -> bool {
         if let Some(optional_header) = self.header.optional_header {
             let file_alignment = optional_header.windows_fields.file_alignment;
             let sections = &self.sections;
@@ -599,7 +598,7 @@ impl Properties for PE<'_> {
                 optional_header.data_directories.get_load_config_table()
             {
                 if let Ok(load_config_val) = get_load_config_val(
-                    mem,
+                    bytes,
                     *load_config_hdr,
                     sections,
                     file_alignment,
@@ -632,7 +631,7 @@ impl Properties for PE<'_> {
         }
         false
     }
-    fn has_rfg(&self, mem: &memmap2::Mmap) -> bool {
+    fn has_rfg(&self, bytes: &[u8]) -> bool {
         if let Some(optional_header) = self.header.optional_header {
             let file_alignment = optional_header.windows_fields.file_alignment;
             let sections = &self.sections;
@@ -640,7 +639,7 @@ impl Properties for PE<'_> {
                 optional_header.data_directories.get_load_config_table()
             {
                 if let Ok(load_config_val) = get_load_config_val(
-                    mem,
+                    bytes,
                     *load_config_hdr,
                     sections,
                     file_alignment,
@@ -657,7 +656,7 @@ impl Properties for PE<'_> {
         }
         false
     }
-    fn has_safe_seh(&self, mem: &memmap2::Mmap) -> bool {
+    fn has_safe_seh(&self, bytes: &[u8]) -> bool {
         if let Some(optional_header) = self.header.optional_header {
             let file_alignment = optional_header.windows_fields.file_alignment;
             let sections = &self.sections;
@@ -665,7 +664,7 @@ impl Properties for PE<'_> {
                 optional_header.data_directories.get_load_config_table()
             {
                 if let Ok(load_config_val) = get_load_config_val(
-                    mem,
+                    bytes,
                     *load_config_hdr,
                     sections,
                     file_alignment,
