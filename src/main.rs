@@ -1,5 +1,6 @@
 #![warn(clippy::pedantic)]
 extern crate clap;
+extern crate core;
 extern crate goblin;
 extern crate ignore;
 extern crate serde_json;
@@ -129,6 +130,7 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
 enum ParseError {
     Goblin(goblin::error::Error),
     IO(std::io::Error),
+    #[allow(dead_code)]
     Unimplemented(&'static str),
 }
 
@@ -159,7 +161,13 @@ impl From<std::io::Error> for ParseError {
 fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
     let fp = fs::File::open(file)?;
     let buffer = unsafe { Mmap::map(&fp)? };
-    match Object::parse(&buffer)? {
+
+    parse_bytes(&buffer, file)
+}
+
+#[allow(clippy::too_many_lines)]
+fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
+    match Object::parse(bytes)? {
         #[cfg(feature = "elf")]
         Object::Elf(elf) => {
             let results = elf::CheckSecResults::parse(&elf);
@@ -173,7 +181,7 @@ fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
         }
         #[cfg(feature = "pe")]
         Object::PE(pe) => {
-            let results = pe::CheckSecResults::parse(&pe, &buffer);
+            let results = pe::CheckSecResults::parse(&pe, bytes);
             let bin_type =
                 if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
             Ok(vec![Binary::new(
@@ -224,7 +232,33 @@ fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
         Object::PE(_) => Err(ParseError::Unimplemented("PE")),
         #[cfg(not(feature = "macho"))]
         Object::Mach(_) => Err(ParseError::Unimplemented("MachO")),
-        Object::Archive(_) => Err(ParseError::Unimplemented("Unix Archive")),
+        Object::Archive(archive) => Ok(archive
+            .members()
+            .iter()
+            .filter_map(|member_name| {
+                match archive.extract(member_name, bytes) {
+                    Ok(ext_bytes) => parse_bytes(
+                        ext_bytes,
+                        Path::new(&format!(
+                            "{}\u{2794}{}",
+                            file.display(),
+                            member_name
+                        )),
+                    )
+                    .ok(),
+                    Err(err) => {
+                        eprintln!(
+                            "Failed to extract member {} of {}: {}",
+                            member_name,
+                            file.display(),
+                            err
+                        );
+                        None
+                    }
+                }
+            })
+            .flatten()
+            .collect()),
         Object::Unknown(magic) => {
             Err(ParseError::Goblin(Error::BadMagic(magic)))
         }
