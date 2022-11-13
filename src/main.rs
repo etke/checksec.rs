@@ -20,7 +20,8 @@ use sysinfo::{
     PidExt, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
 };
 
-use std::path::{Path, PathBuf};
+use std::ffi::OsStr;
+use std::path::Path;
 use std::{env, fmt, fs, process};
 
 #[cfg(feature = "color")]
@@ -97,16 +98,16 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
         output::Format::Text => {
             for process in &processes.processes {
                 for binary in &process.binary {
-                    if let Some(file_name) =
-                        PathBuf::from(&binary.file).file_name()
-                    {
-                        if let Some(name) = file_name.to_str() {
-                            println!(
-                                "{}({})\n \u{21aa} {}",
-                                name, process.pid, binary
-                            );
-                        }
-                    }
+                    println!(
+                        "{}({})\n \u{21aa} {}",
+                        binary
+                            .file
+                            .file_name()
+                            .unwrap_or_else(|| OsStr::new("n/a"))
+                            .to_string_lossy(),
+                        process.pid,
+                        binary
+                    );
                 }
                 #[cfg(all(
                     feature = "maps",
