@@ -272,7 +272,7 @@ impl fmt::Display for MapEntry {
                 .red(),
                 match &self.pathname {
                     Some(pathname) => pathname.display().to_string().red(),
-                    None => "".to_string().red(),
+                    None => String::new().red(),
                 }
             )
         } else {
@@ -284,7 +284,7 @@ impl fmt::Display for MapEntry {
                 self.flags,
                 match &self.pathname {
                     Some(pathname) => pathname.display().to_string(),
-                    None => "".to_string(),
+                    None => String::new(),
                 }
             )
         }

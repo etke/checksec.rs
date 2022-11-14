@@ -1,4 +1,6 @@
 #![warn(clippy::pedantic)]
+// Do not require 1.65.0
+#![allow(clippy::manual_let_else)]
 extern crate clap;
 extern crate core;
 extern crate goblin;
@@ -315,7 +317,7 @@ fn main() {
                 .requires("pid")
                 .requires("process")
                 .requires("process-all")
-                .conflicts_with_all(&["directory", "file"]),
+                .conflicts_with_all(["directory", "file"]),
         )
         .arg(
             Arg::new("no-color")
@@ -355,7 +357,7 @@ fn main() {
         )
         .group(
             ArgGroup::new("operation")
-                .args(&["directory", "file", "pid", "process", "process-all"])
+                .args(["directory", "file", "pid", "process", "process-all"])
                 .required(true),
         )
         .get_matches();
