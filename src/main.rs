@@ -209,21 +209,20 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
             Mach::Fat(fatmach) => {
                 let mut fat_bins: Vec<Binary> = Vec::new();
                 for (idx, _) in fatmach.arches()?.iter().enumerate() {
-                    if let Ok(container) = fatmach.get(idx) {
-                        if let SingleArch::MachO(container) = container {
-                            let results =
-                                macho::CheckSecResults::parse(&container);
-                            let bin_type = if container.is_64 {
-                                BinType::MachO64
-                            } else {
-                                BinType::MachO32
-                            };
-                            fat_bins.push(Binary::new(
-                                bin_type,
-                                file.to_path_buf(),
-                                BinSpecificProperties::MachO(results),
-                            ));
-                        }
+                    if let Ok(SingleArch::MachO(container)) = fatmach.get(idx)
+                    {
+                        let results =
+                            macho::CheckSecResults::parse(&container);
+                        let bin_type = if container.is_64 {
+                            BinType::MachO64
+                        } else {
+                            BinType::MachO32
+                        };
+                        fat_bins.push(Binary::new(
+                            bin_type,
+                            file.to_path_buf(),
+                            BinSpecificProperties::MachO(results),
+                        ));
                     }
                 }
                 Ok(fat_bins)
@@ -318,7 +317,7 @@ fn main() {
                 .requires("pid")
                 .requires("process")
                 .requires("process-all")
-                .conflicts_with_all(&["directory", "file"]),
+                .conflicts_with_all(["directory", "file"]),
         )
         .arg(
             Arg::new("no-color")
@@ -358,7 +357,7 @@ fn main() {
         )
         .group(
             ArgGroup::new("operation")
-                .args(&["directory", "file", "pid", "process", "process-all"])
+                .args(["directory", "file", "pid", "process", "process-all"])
                 .required(true),
         )
         .get_matches();
