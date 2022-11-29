@@ -13,6 +13,7 @@ use clap::{
 use goblin::error::Error;
 #[cfg(feature = "macho")]
 use goblin::mach::Mach;
+use goblin::mach::SingleArch;
 use goblin::Object;
 use ignore::Walk;
 use memmap2::Mmap;
@@ -209,18 +210,20 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
                 let mut fat_bins: Vec<Binary> = Vec::new();
                 for (idx, _) in fatmach.arches()?.iter().enumerate() {
                     if let Ok(container) = fatmach.get(idx) {
-                        let results =
-                            macho::CheckSecResults::parse(&container);
-                        let bin_type = if container.is_64 {
-                            BinType::MachO64
-                        } else {
-                            BinType::MachO32
-                        };
-                        fat_bins.push(Binary::new(
-                            bin_type,
-                            file.to_path_buf(),
-                            BinSpecificProperties::MachO(results),
-                        ));
+                        if let SingleArch::MachO(container) = container {
+                            let results =
+                                macho::CheckSecResults::parse(&container);
+                            let bin_type = if container.is_64 {
+                                BinType::MachO64
+                            } else {
+                                BinType::MachO32
+                            };
+                            fat_bins.push(Binary::new(
+                                bin_type,
+                                file.to_path_buf(),
+                                BinSpecificProperties::MachO(results),
+                            ));
+                        }
                     }
                 }
                 Ok(fat_bins)

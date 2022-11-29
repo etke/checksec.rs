@@ -2,7 +2,7 @@ extern crate checksec;
 extern crate goblin;
 
 use checksec::macho::CheckSecResults;
-use goblin::mach::{Mach, MachO};
+use goblin::mach::{Mach, SingleArch};
 use goblin::Object;
 use std::{env, fs};
 
@@ -24,12 +24,16 @@ fn main() {
                                 for (idx, _) in
                                     fatmach.iter_arches().enumerate()
                                 {
-                                    let container: MachO =
+                                    let container: SingleArch =
                                         fatmach.get(idx).unwrap();
-                                    println!(
-                                        "{:#?}",
-                                        CheckSecResults::parse(&container)
-                                    );
+                                    if let SingleArch::MachO(container) =
+                                        container
+                                    {
+                                        println!(
+                                            "{:#?}",
+                                            CheckSecResults::parse(&container)
+                                        );
+                                    }
                                 }
                             }
                         },
