@@ -361,8 +361,7 @@ impl Process {
             Ok(maps) => Self { pid, binary, maps: Some(maps) },
             Err(e) => {
                 eprintln!(
-                    "Failed to parse maps for process with ID {}: {}",
-                    pid, e
+                    "Failed to parse maps for process with ID {pid}: {e}"
                 );
                 Self { pid, binary, maps: None }
             }
@@ -371,8 +370,7 @@ impl Process {
     #[cfg(all(feature = "maps", target_os = "linux"))]
     pub fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, Error> {
         let mut maps = Vec::new();
-        for line in fs::read_to_string(format!("/proc/{}/maps", pid))?.lines()
-        {
+        for line in fs::read_to_string(format!("/proc/{pid}/maps"))?.lines() {
             let mut split_line = line.split_whitespace();
             let (start_str, end_str) = split_line
                 .next()
