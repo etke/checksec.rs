@@ -70,3 +70,4 @@ jobs:
     - run: cargo build --no-default-features --features elf
     - run: cargo build --no-default-features --features pe
     - run: cargo build --no-default-features --features macho
+    - run: cargo test

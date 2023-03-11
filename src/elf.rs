@@ -539,3 +539,16 @@ impl Properties for Elf<'_> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FORTIFIABLE_FUNCTIONS;
+
+    #[test]
+    fn test_sorted_fortifiable_functions() {
+        assert!(FORTIFIABLE_FUNCTIONS.windows(2).all(|f| {
+            println!("{} ? {}", f[0], f[1]);
+            f[0] < f[1]
+        }));
+    }
+}
