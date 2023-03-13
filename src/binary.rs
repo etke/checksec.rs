@@ -1,6 +1,10 @@
 #[cfg(feature = "color")]
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
+#[cfg(all(feature = "color", not(target_os = "windows")))]
+use std::os::unix::fs::PermissionsExt;
+#[cfg(all(feature = "color", not(target_os = "windows")))]
+use std::path::Path;
 use std::path::PathBuf;
 use std::{fmt, usize};
 
@@ -108,13 +112,43 @@ impl fmt::Display for Binary {
 #[cfg(feature = "color")]
 impl fmt::Display for Binary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[cfg(target_os = "windows")]
+        let filefmt = self.file.display().to_string().bright_blue();
+        #[cfg(not(target_os = "windows"))]
+        let filefmt = match std::fs::metadata(&self.file) {
+            Ok(md) => {
+                #[cfg(target_os = "linux")]
+                fn has_filecaps(file: &Path) -> bool {
+                    xattr::get(file, "security.capability")
+                        .unwrap_or(None)
+                        .is_some()
+                }
+                #[cfg(not(target_os = "linux"))]
+                fn has_filecaps(_file: &Path) -> bool {
+                    false
+                }
+
+                let mode = md.permissions().mode();
+                if mode & 0o4000 == 0o4000 {
+                    self.file.display().to_string().white().on_red()
+                } else if mode & 0o2000 == 0o2000 {
+                    self.file.display().to_string().black().on_yellow()
+                } else if has_filecaps(&self.file) {
+                    self.file.display().to_string().black().on_blue()
+                } else {
+                    self.file.display().to_string().bright_blue()
+                }
+            }
+            Err(_) => self.file.display().to_string().bright_blue(),
+        };
+
         write!(
             f,
             "{}: | {} | {} {}",
             self.binarytype,
             self.properties,
             "File:".bold().underline(),
-            self.file.display().to_string().bright_blue()
+            filefmt
         )
     }
 }
