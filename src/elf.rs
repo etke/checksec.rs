@@ -324,13 +324,13 @@ const FORTIFIABLE_FUNCTIONS: [&str; 79] = [
     "obstack_vprintf",
     "poll",
     "ppoll",
-    "pread64",
     "pread",
+    "pread64",
     "printf",
     "ptsname_r",
     "read",
-    "readlinkat",
     "readlink",
+    "readlinkat",
     "realpath",
     "recv",
     "recvfrom",
@@ -537,5 +537,18 @@ impl Properties for Elf<'_> {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FORTIFIABLE_FUNCTIONS;
+
+    #[test]
+    fn test_sorted_fortifiable_functions() {
+        assert!(FORTIFIABLE_FUNCTIONS.windows(2).all(|f| {
+            println!("{} ? {}", f[0], f[1]);
+            f[0] < f[1]
+        }));
     }
 }
