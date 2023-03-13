@@ -78,11 +78,11 @@ impl fmt::Display for BinSpecificProperties {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             #[cfg(feature = "elf")]
-            Self::Elf(b) => write!(f, "{}", b),
+            Self::Elf(b) => write!(f, "{b}"),
             #[cfg(feature = "pe")]
-            Self::PE(b) => write!(f, "{}", b),
+            Self::PE(b) => write!(f, "{b}"),
             #[cfg(feature = "macho")]
-            Self::MachO(b) => write!(f, "{}", b),
+            Self::MachO(b) => write!(f, "{b}"),
         }
     }
 }

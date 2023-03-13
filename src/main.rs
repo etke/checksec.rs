@@ -1,4 +1,6 @@
 #![warn(clippy::pedantic)]
+// Do not require 1.65.0
+#![allow(clippy::manual_let_else)]
 extern crate clap;
 extern crate core;
 extern crate goblin;
@@ -57,19 +59,19 @@ fn print_binary_results(binaries: &Binaries, settings: &output::Settings) {
                 if let Ok(colored_json) =
                     to_colored_json_auto(&json!(binaries))
                 {
-                    println!("{}", colored_json);
+                    println!("{colored_json}");
                 }
             } else if let Ok(json_str) = to_string_pretty(&json!(binaries)) {
-                println!("{}", json_str);
+                println!("{json_str}");
             }
             #[cfg(not(feature = "color"))]
             if let Ok(json_str) = to_string_pretty(&json!(binaries)) {
-                println!("{}", json_str);
+                println!("{json_str}");
             }
         }
         output::Format::Text => {
             for binary in &binaries.binaries {
-                println!("{}", binary);
+                println!("{binary}");
             }
         }
     }
@@ -86,14 +88,14 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
                 if let Ok(colored_json) =
                     to_colored_json_auto(&json!(processes))
                 {
-                    println!("{}", colored_json);
+                    println!("{colored_json}");
                 }
             } else if let Ok(json_str) = to_string_pretty(&json!(processes)) {
-                println!("{}", json_str);
+                println!("{json_str}");
             }
             #[cfg(not(feature = "color"))]
             if let Ok(json_str) = to_string_pretty(&json!(processes)) {
-                println!("{}", json_str);
+                println!("{json_str}");
             }
         }
         output::Format::Text => {
@@ -118,7 +120,7 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
                     if let Some(maps) = &process.maps {
                         println!("{:>12}", "\u{21aa} Maps:");
                         for map in maps {
-                            println!("\t{}", map);
+                            println!("\t{map}");
                         }
                     }
                 }
@@ -140,7 +142,7 @@ impl fmt::Display for ParseError {
             Self::Goblin(e) => e.fmt(f),
             Self::IO(e) => e.fmt(f),
             Self::Unimplemented(str) => {
-                write!(f, "Support for files of type {} not implemented", str)
+                write!(f, "Support for files of type {str} not implemented")
             }
         }
     }
@@ -315,7 +317,7 @@ fn main() {
                 .requires("pid")
                 .requires("process")
                 .requires("process-all")
-                .conflicts_with_all(&["directory", "file"]),
+                .conflicts_with_all(["directory", "file"]),
         )
         .arg(
             Arg::new("no-color")
@@ -355,7 +357,7 @@ fn main() {
         )
         .group(
             ArgGroup::new("operation")
-                .args(&["directory", "file", "pid", "process", "process-all"])
+                .args(["directory", "file", "pid", "process", "process-all"])
                 .required(true),
         )
         .get_matches();
@@ -401,7 +403,7 @@ fn main() {
             .map(|id| match id.parse::<sysinfo::Pid>() {
                 Ok(id) => id,
                 Err(msg) => {
-                    eprintln!("Invalid process ID {}: {}", id, msg);
+                    eprintln!("Invalid process ID {id}: {msg}");
                     process::exit(1);
                 }
             })
@@ -416,7 +418,7 @@ fn main() {
             let process = if let Some(process) = system.process(procid) {
                 process
             } else {
-                eprintln!("No process found with ID {}", procid);
+                eprintln!("No process found with ID {procid}");
                 continue;
             };
 
@@ -463,7 +465,7 @@ fn main() {
             }
         }
         if procs.is_empty() {
-            eprintln!("No process found matching name {}", procname);
+            eprintln!("No process found matching name {procname}");
             process::exit(1);
         }
         print_process_results(&Processes::new(procs), &settings);
