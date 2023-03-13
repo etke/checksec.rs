@@ -24,7 +24,7 @@ fn main() {
 }
 
 fn parse(bytes: &[u8]) {
-    match Object::parse(&bytes).unwrap() {
+    match Object::parse(bytes).unwrap() {
         Object::Mach(mach) => match mach {
             Mach::Binary(macho) => {
                 println!("{:#?}", CheckSecResults::parse(&macho));
