@@ -14,7 +14,7 @@ use clap::{
 };
 use goblin::error::Error;
 #[cfg(feature = "macho")]
-use goblin::mach::Mach;
+use goblin::mach::{Mach, SingleArch::Archive, SingleArch::MachO};
 use goblin::Object;
 use ignore::Walk;
 use memmap2::Mmap;
@@ -193,78 +193,106 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
             )])
         }
         #[cfg(feature = "macho")]
-        Object::Mach(mach) => match mach {
-            Mach::Binary(macho) => {
-                let results = macho::CheckSecResults::parse(&macho);
-                let bin_type = if macho.is_64 {
-                    BinType::MachO64
-                } else {
-                    BinType::MachO32
-                };
-                Ok(vec![Binary::new(
-                    bin_type,
-                    file.to_path_buf(),
-                    BinSpecificProperties::MachO(results),
-                )])
-            }
-            Mach::Fat(fatmach) => {
-                let mut fat_bins: Vec<Binary> = Vec::new();
-                for (idx, _) in fatmach.arches()?.iter().enumerate() {
-                    if let Ok(container) = fatmach.get(idx) {
-                        let results =
-                            macho::CheckSecResults::parse(&container);
-                        let bin_type = if container.is_64 {
-                            BinType::MachO64
-                        } else {
-                            BinType::MachO32
-                        };
-                        fat_bins.push(Binary::new(
-                            bin_type,
-                            file.to_path_buf(),
-                            BinSpecificProperties::MachO(results),
-                        ));
-                    }
+        Object::Mach(mach) => {
+            match mach {
+                Mach::Binary(macho) => {
+                    let results = macho::CheckSecResults::parse(&macho);
+                    let bin_type = if macho.is_64 {
+                        BinType::MachO64
+                    } else {
+                        BinType::MachO32
+                    };
+                    Ok(vec![Binary::new(
+                        bin_type,
+                        file.to_path_buf(),
+                        BinSpecificProperties::MachO(results),
+                    )])
                 }
-                Ok(fat_bins)
+                Mach::Fat(fatmach) => {
+                    let mut fat_bins: Vec<Binary> = Vec::new();
+                    for (idx, fatarch) in fatmach.iter_arches().enumerate() {
+                        if let Ok(container) = fatmach.get(idx) {
+                            match container {
+                                MachO(mach) => {
+                                    let results =
+                                        macho::CheckSecResults::parse(&mach);
+                                    let bin_type = if mach.is_64 {
+                                        BinType::MachO64
+                                    } else {
+                                        BinType::MachO32
+                                    };
+                                    fat_bins.push(Binary::new(
+                                        bin_type,
+                                        file.to_path_buf(),
+                                        BinSpecificProperties::MachO(results),
+                                    ));
+                                }
+                                Archive(archive) => {
+                                    let fatarch = fatarch?;
+                                    if let Some(archive_bytes) = bytes.get(
+                                        fatarch.offset as usize
+                                            ..(fatarch.offset + fatarch.size)
+                                                as usize,
+                                    ) {
+                                        fat_bins.append(&mut parse_archive(
+                                            &archive,
+                                            file,
+                                            archive_bytes,
+                                        ));
+                                    } else {
+                                        Err(goblin::error::Error::Malformed("Archive refers to invalid position".to_string()))?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(fat_bins)
+                }
             }
-        },
+        }
         #[cfg(not(feature = "elf"))]
         Object::Elf(_) => Err(ParseError::Unimplemented("ELF")),
         #[cfg(not(feature = "pe"))]
         Object::PE(_) => Err(ParseError::Unimplemented("PE")),
         #[cfg(not(feature = "macho"))]
         Object::Mach(_) => Err(ParseError::Unimplemented("MachO")),
-        Object::Archive(archive) => Ok(archive
-            .members()
-            .iter()
-            .filter_map(|member_name| {
-                match archive.extract(member_name, bytes) {
-                    Ok(ext_bytes) => parse_bytes(
-                        ext_bytes,
-                        Path::new(&format!(
-                            "{}\u{2794}{}",
-                            file.display(),
-                            member_name
-                        )),
-                    )
-                    .ok(),
-                    Err(err) => {
-                        eprintln!(
-                            "Failed to extract member {} of {}: {}",
-                            member_name,
-                            file.display(),
-                            err
-                        );
-                        None
-                    }
-                }
-            })
-            .flatten()
-            .collect()),
+        Object::Archive(archive) => Ok(parse_archive(&archive, file, bytes)),
         Object::Unknown(magic) => {
             Err(ParseError::Goblin(Error::BadMagic(magic)))
         }
     }
+}
+
+fn parse_archive(
+    archive: &goblin::archive::Archive,
+    file: &Path,
+    bytes: &[u8],
+) -> Vec<Binary> {
+    archive
+        .members()
+        .iter()
+        .filter_map(|member_name| match archive.extract(member_name, bytes) {
+            Ok(ext_bytes) => parse_bytes(
+                ext_bytes,
+                Path::new(&format!(
+                    "{}\u{2794}{}",
+                    file.display(),
+                    member_name
+                )),
+            )
+            .ok(),
+            Err(err) => {
+                eprintln!(
+                    "Failed to extract member {} of {}: {}",
+                    member_name,
+                    file.display(),
+                    err
+                );
+                None
+            }
+        })
+        .flatten()
+        .collect()
 }
 
 fn walk(basepath: &Path, settings: &output::Settings) {
