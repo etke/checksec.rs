@@ -317,12 +317,9 @@ fn parse(
     if let Some(ref mut cache) = cache {
         let cache = cache.lock().unwrap();
         if let Some(entry) = cache.get(file) {
-            println!("Cached {}", file.display());
             return Ok(entry.clone());
         }
     }
-
-    println!("Parsing {}...", file.display());
 
     let fp = fs::File::open(file)?;
     let buffer = unsafe { Mmap::map(&fp)? };
