@@ -12,23 +12,37 @@ use clap::{
     crate_authors, crate_description, crate_version, Arg, ArgAction, ArgGroup,
     Command,
 };
+#[cfg(all(feature = "maps", target_os = "linux"))]
+use either::Either;
 use goblin::error::Error;
 #[cfg(feature = "macho")]
 use goblin::mach::{Mach, SingleArch::Archive, SingleArch::MachO};
 use goblin::Object;
 use ignore::Walk;
+#[cfg(all(feature = "maps", target_os = "linux"))]
+use itertools::Itertools;
 use memmap2::Mmap;
+use rayon::iter::ParallelBridge;
+use rayon::prelude::*;
 use serde_json::{json, to_string_pretty};
 use sysinfo::{
     PidExt, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
 };
 
+use std::collections::HashMap;
+#[cfg(all(target_os = "linux", feature = "elf"))]
+use std::collections::HashSet;
 use std::ffi::OsStr;
+use std::io::ErrorKind;
+#[cfg(all(feature = "color", not(target_os = "windows")))]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::{env, fmt, fs, process};
 
 #[cfg(feature = "color")]
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 
 #[cfg(feature = "color")]
 use colored_json::to_colored_json_auto;
@@ -36,19 +50,65 @@ use colored_json::to_colored_json_auto;
 mod binary;
 mod proc;
 
-use binary::{BinSpecificProperties, BinType, Binaries, Binary};
+use binary::{BinSpecificProperties, BinType, Binary, Blob};
 use proc::{Process, Processes};
 
 #[cfg(feature = "elf")]
 use checksec::elf;
+#[cfg(all(target_os = "linux", feature = "elf"))]
+use checksec::elf::LibraryLookup;
+#[cfg(all(target_os = "linux", feature = "elf"))]
+use checksec::ldso::LdSoError;
 #[cfg(feature = "macho")]
 use checksec::macho;
 use checksec::output;
 #[cfg(feature = "pe")]
 use checksec::pe;
-use checksec::underline;
+#[cfg(all(target_os = "linux", feature = "elf"))]
+use checksec::shared::VecRpath;
+use checksec::{bold, underline};
 
-fn print_binary_results(binaries: &Binaries, settings: &output::Settings) {
+#[cfg(all(feature = "color", target_os = "windows"))]
+fn print_filename(file: &Path) -> ColoredString {
+    file.display().to_string().bright_blue()
+}
+
+#[cfg(all(feature = "color", not(target_os = "windows")))]
+fn print_filename(file: &Path) -> ColoredString {
+    match std::fs::metadata(file) {
+        Ok(md) => {
+            #[cfg(target_os = "linux")]
+            fn has_filecaps(file: &Path) -> bool {
+                xattr::get(file, "security.capability")
+                    .unwrap_or(None)
+                    .is_some()
+            }
+            #[cfg(not(target_os = "linux"))]
+            fn has_filecaps(_file: &Path) -> bool {
+                false
+            }
+
+            let mode = md.permissions().mode();
+            if mode & 0o4000 == 0o4000 {
+                file.display().to_string().white().on_red()
+            } else if mode & 0o2000 == 0o2000 {
+                file.display().to_string().black().on_yellow()
+            } else if has_filecaps(file) {
+                file.display().to_string().black().on_blue()
+            } else {
+                file.display().to_string().bright_blue()
+            }
+        }
+        Err(_) => file.display().to_string().bright_blue(),
+    }
+}
+
+#[cfg(not(feature = "color"))]
+fn print_filename(file: &Path) -> impl std::fmt::Display + '_ {
+    file.display()
+}
+
+fn print_binary_results(binaries: &[Binary], settings: &output::Settings) {
     match settings.format {
         output::Format::Json => {
             println!("{}", &json!(binaries));
@@ -70,8 +130,36 @@ fn print_binary_results(binaries: &Binaries, settings: &output::Settings) {
             }
         }
         output::Format::Text => {
-            for binary in &binaries.binaries {
-                println!("{binary}");
+            let mut first = true;
+
+            for binary in binaries {
+                if !first && settings.libraries {
+                    println!();
+                }
+                first = false;
+
+                for blob in &binary.blobs {
+                    println!(
+                        "{}: | {} | {} {}",
+                        blob.binarytype,
+                        blob.properties,
+                        underline!(bold!("File:")),
+                        print_filename(&binary.file)
+                    );
+                }
+                if settings.libraries {
+                    for library in &binary.libraries {
+                        for blob in &library.blobs {
+                            println!(
+                                "{}: | {} | {} {}",
+                                blob.binarytype,
+                                blob.properties,
+                                underline!(bold!("File:")),
+                                print_filename(&library.file)
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -99,18 +187,47 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
             }
         }
         output::Format::Text => {
+            let mut first = true;
+
             for process in &processes.processes {
-                for binary in &process.binary {
+                if !first && settings.libraries {
+                    println!();
+                }
+                first = false;
+
+                for blob in &process.binary.blobs {
                     println!(
-                        "{}({})\n \u{21aa} {}",
-                        binary
+                        "{}({})\n \u{21aa} {}: | {} | {} {}",
+                        bold!(process
+                            .binary
                             .file
                             .file_name()
                             .unwrap_or_else(|| OsStr::new("n/a"))
-                            .to_string_lossy(),
+                            .to_string_lossy()),
                         process.pid,
-                        binary
+                        blob.binarytype,
+                        blob.properties,
+                        underline!(bold!("File:")),
+                        print_filename(&process.binary.file)
                     );
+                }
+
+                #[cfg(all(
+                    feature = "maps",
+                    any(target_os = "linux", target_os = "windows")
+                ))]
+                if let Some(libraries) = &process.libraries {
+                    for library in libraries {
+                        for blob in &library.blobs {
+                            println!(
+                                " \u{21aa} {}: | {} | {} {}",
+                                blob.binarytype,
+                                blob.properties,
+                                underline!(bold!("File:")),
+                                print_filename(&library.file)
+                            );
+                        }
+                    }
                 }
                 #[cfg(all(
                     feature = "maps",
@@ -129,9 +246,29 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
     }
 }
 
+struct Lookup {
+    #[cfg(all(target_os = "linux", feature = "elf"))]
+    elf: LibraryLookup,
+}
+
+impl Lookup {
+    #[cfg(all(target_os = "linux", feature = "elf"))]
+    fn elf_lookup(
+        &self,
+        binarypath: &Path,
+        rpath: &VecRpath,
+        runpath: &VecRpath,
+        libfilename: &str,
+    ) -> Option<PathBuf> {
+        self.elf.lookup(binarypath, rpath, runpath, libfilename)
+    }
+}
+
 enum ParseError {
     Goblin(goblin::error::Error),
     IO(std::io::Error),
+    #[cfg(all(target_os = "linux", feature = "elf"))]
+    LdSo(LdSoError),
     #[allow(dead_code)]
     Unimplemented(&'static str),
 }
@@ -141,6 +278,10 @@ impl fmt::Display for ParseError {
         match self {
             Self::Goblin(e) => e.fmt(f),
             Self::IO(e) => e.fmt(f),
+            #[cfg(all(target_os = "linux", feature = "elf"))]
+            Self::LdSo(e) => {
+                write!(f, "Failed to initialize library lookup: {e}")
+            }
             Self::Unimplemented(str) => {
                 write!(f, "Support for files of type {str} not implemented")
             }
@@ -160,11 +301,39 @@ impl From<std::io::Error> for ParseError {
     }
 }
 
-fn parse(file: &Path) -> Result<Vec<Binary>, ParseError> {
+#[cfg(all(target_os = "linux", feature = "elf"))]
+impl From<LdSoError> for ParseError {
+    fn from(err: LdSoError) -> ParseError {
+        ParseError::LdSo(err)
+    }
+}
+
+type Cache = Arc<Mutex<HashMap<PathBuf, Vec<Binary>>>>;
+
+fn parse(
+    file: &Path,
+    cache: &mut Option<Cache>,
+) -> Result<Vec<Binary>, ParseError> {
+    if let Some(ref mut cache) = cache {
+        let cache = cache.lock().unwrap();
+        if let Some(entry) = cache.get(file) {
+            println!("Cached {}", file.display());
+            return Ok(entry.clone());
+        }
+    }
+
+    println!("Parsing {}...", file.display());
+
     let fp = fs::File::open(file)?;
     let buffer = unsafe { Mmap::map(&fp)? };
 
-    parse_bytes(&buffer, file)
+    let result = parse_bytes(&buffer, file)?;
+    if let Some(ref mut cache) = cache {
+        let mut cache = cache.lock().unwrap();
+        cache.insert(file.to_path_buf(), result.clone());
+    }
+
+    Ok(result)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -176,9 +345,8 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
             let bin_type =
                 if elf.is_64 { BinType::Elf64 } else { BinType::Elf32 };
             Ok(vec![Binary::new(
-                bin_type,
                 file.to_path_buf(),
-                BinSpecificProperties::Elf(results),
+                vec![Blob::new(bin_type, BinSpecificProperties::Elf(results))],
             )])
         }
         #[cfg(feature = "pe")]
@@ -187,9 +355,8 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
             let bin_type =
                 if pe.is_64 { BinType::PE64 } else { BinType::PE32 };
             Ok(vec![Binary::new(
-                bin_type,
                 file.to_path_buf(),
-                BinSpecificProperties::PE(results),
+                vec![Blob::new(bin_type, BinSpecificProperties::PE(results))],
             )])
         }
         #[cfg(feature = "macho")]
@@ -203,13 +370,16 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
                         BinType::MachO32
                     };
                     Ok(vec![Binary::new(
-                        bin_type,
                         file.to_path_buf(),
-                        BinSpecificProperties::MachO(results),
+                        vec![Blob::new(
+                            bin_type,
+                            BinSpecificProperties::MachO(results),
+                        )],
                     )])
                 }
                 Mach::Fat(fatmach) => {
                     let mut fat_bins: Vec<Binary> = Vec::new();
+                    let mut fat_blobs: Vec<Blob> = Vec::new();
                     for (idx, fatarch) in fatmach.iter_arches().enumerate() {
                         if let Ok(container) = fatmach.get(idx) {
                             match container {
@@ -221,9 +391,8 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
                                     } else {
                                         BinType::MachO32
                                     };
-                                    fat_bins.push(Binary::new(
+                                    fat_blobs.push(Blob::new(
                                         bin_type,
-                                        file.to_path_buf(),
                                         BinSpecificProperties::MachO(results),
                                     ));
                                 }
@@ -246,6 +415,7 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
                             }
                         }
                     }
+                    fat_bins.push(Binary::new(file.to_path_buf(), fat_blobs));
                     Ok(fat_bins)
                 }
             }
@@ -295,19 +465,297 @@ fn parse_archive(
         .collect()
 }
 
-fn walk(basepath: &Path, settings: &output::Settings) {
-    let mut bins: Vec<Binary> = Vec::new();
-    for result in Walk::new(basepath).flatten() {
-        if let Some(filetype) = result.file_type() {
-            if filetype.is_file() {
-                if let Ok(mut result) = parse(result.path()) {
-                    bins.append(&mut result);
+#[cfg(not(all(target_os = "linux", feature = "elf")))]
+fn parse_single_file(
+    file: &Path,
+    _scan_dynlibs: bool,
+) -> Result<Vec<Binary>, ParseError> {
+    parse(file, &mut None)
+}
+
+#[cfg(not(all(target_os = "linux", feature = "elf")))]
+fn parse_file_impl(
+    file: &Path,
+    _scan_dynlibs: bool,
+    _lookup: &Option<Lookup>,
+    cache: &mut Option<Cache>,
+) -> Result<Vec<Binary>, ParseError> {
+    parse(file, cache)
+}
+
+#[cfg(all(target_os = "linux", feature = "elf"))]
+fn scan_dependencies(
+    binary: &Binary,
+    lookup: &Lookup,
+    scanned: &HashSet<PathBuf>,
+) -> HashSet<PathBuf> {
+    let mut to_scan = HashSet::new();
+
+    for blob in &binary.blobs {
+        #[allow(irrefutable_let_patterns)]
+        if let BinSpecificProperties::Elf(elf_properties) = &blob.properties {
+            for dynlib in &elf_properties.dynlibs {
+                match lookup.elf_lookup(
+                    &binary.file,
+                    &elf_properties.rpath,
+                    &elf_properties.runpath,
+                    dynlib,
+                ) {
+                    Some(path) => {
+                        if scanned.contains(&path) {
+                            continue;
+                        }
+                        to_scan.insert(path);
+                    }
+                    None => {
+                        eprintln!(
+                            "Library {} for {} not found",
+                            underline!(dynlib),
+                            binary.file.display()
+                        );
+                    }
                 }
             }
         }
     }
-    print_binary_results(&Binaries::new(bins), settings);
+
+    to_scan
 }
+
+#[cfg(all(target_os = "linux", feature = "elf"))]
+fn parse_dependencies(
+    binary: &mut Binary,
+    lookup: &Lookup,
+    cache: &Option<Cache>,
+) {
+    let mut scanned = HashSet::new();
+    let mut to_scan = scan_dependencies(binary, lookup, &scanned);
+
+    while !to_scan.is_empty() {
+        let mut results: Vec<Binary> = to_scan
+            .par_iter()
+            .filter_map(|lib| {
+                match parse(lib, &mut cache.as_ref().map(Arc::clone)) {
+                    Ok(bins) => Some(bins),
+                    Err(err) => {
+                        eprintln!(
+                            "Failed to parse {} for {}: {}",
+                            lib.display(),
+                            binary.file.display(),
+                            err
+                        );
+                        None
+                    }
+                }
+            })
+            .flatten()
+            .collect();
+
+        scanned.extend(to_scan);
+
+        to_scan = results
+            .par_iter()
+            .flat_map(|bin| scan_dependencies(bin, lookup, &scanned))
+            .collect();
+
+        binary.libraries.append(&mut results);
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "elf"))]
+fn parse_file_impl(
+    file: &Path,
+    scan_dynlibs: bool,
+    lookup: &Option<Lookup>,
+    cache: &mut Option<Cache>,
+) -> Result<Vec<Binary>, ParseError> {
+    let mut results = parse(file, cache)?;
+
+    if !scan_dynlibs || lookup.is_none() {
+        return Ok(results);
+    }
+
+    let lookup = lookup.as_ref().unwrap();
+
+    for result in &mut results {
+        parse_dependencies(result, lookup, cache);
+    }
+
+    Ok(results)
+}
+
+#[cfg(all(target_os = "linux", feature = "elf"))]
+fn parse_single_file(
+    file: &Path,
+    scan_dynlibs: bool,
+) -> Result<Vec<Binary>, ParseError> {
+    if !scan_dynlibs {
+        return parse(file, &mut None);
+    }
+
+    let lookup = Lookup { elf: LibraryLookup::new()? };
+
+    parse_file_impl(file, true, &Some(lookup), &mut None)
+}
+
+fn walk(
+    basepath: &Path,
+    scan_dynlibs: bool,
+    output_settings: &output::Settings,
+) {
+    let lookup = if scan_dynlibs {
+        Some(Lookup {
+            #[cfg(all(target_os = "linux", feature = "elf"))]
+            elf: LibraryLookup::new().unwrap_or_else(|err| {
+                eprintln!("Failed to initialize library lookup: {err}");
+                process::exit(1)
+            }),
+        })
+    } else {
+        None
+    };
+
+    let cache = Arc::new(Mutex::new(HashMap::new()));
+
+    let bins: Vec<Binary> = Walk::new(basepath)
+        .flatten()
+        .filter(|entry| {
+            entry.file_type().filter(std::fs::FileType::is_file).is_some()
+        })
+        .par_bridge()
+        .filter_map(|entry| {
+            parse_file_impl(
+                entry.path(),
+                scan_dynlibs,
+                &lookup,
+                &mut Some(Arc::clone(&cache)),
+            )
+            .ok()
+        })
+        .flatten()
+        .collect();
+
+    print_binary_results(&bins, output_settings);
+}
+
+#[cfg(all(feature = "maps", target_os = "linux"))]
+fn parse_process_libraries(
+    process: &sysinfo::Process,
+    cache: &mut Option<Cache>,
+) -> Result<Vec<Binary>, std::io::Error> {
+    Ok(Process::parse_maps(process.pid().as_u32() as usize)?
+        .into_iter()
+        .filter(|m| m.flags.x)
+        .filter_map(|m| m.pathname)
+        .filter(|p| p.is_absolute() && p != process.exe())
+        .map(|p| match p.file_name() {
+            Some(file_name) => match file_name.to_str() {
+                Some(file_name) => {
+                    match file_name.strip_suffix(" (deleted)") {
+                        Some(s) => {
+                            let mut pb = PathBuf::from(
+                                p.parent().unwrap_or(Path::new("/")),
+                            );
+                            pb.push(s);
+                            Either::Left(pb)
+                        }
+                        None => Either::Right(p),
+                    }
+                }
+                None => Either::Right(p),
+            },
+            None => Either::Right(p),
+        })
+        .unique()
+        .par_bridge()
+        .filter_map(|p| {
+            parse(&p, &mut cache.as_ref().map(Arc::clone))
+                .map_err(|err| {
+                    if let ParseError::IO(ref e) = err {
+                        if e.kind() == ErrorKind::NotFound
+                            || e.kind() == ErrorKind::PermissionDenied
+                        {
+                            return;
+                        }
+                    }
+
+                    eprintln!(
+                        "Failed to parse '{}' for process ID {}: {}",
+                        p.display(),
+                        process.pid(),
+                        err
+                    );
+                })
+                .ok()
+        })
+        .flatten()
+        .collect::<Vec<Binary>>())
+}
+
+#[cfg(not(all(feature = "maps", target_os = "linux")))]
+fn parse_process_libraries(
+    _process: &sysinfo::Process,
+    _cache: &mut Option<Cache>,
+) -> Result<Vec<Binary>, std::io::Error> {
+    Err(std::io::Error::new(
+        ErrorKind::Unsupported,
+        "parse_process_libraries()",
+    ))
+}
+
+fn parse_processes<'a, I>(processes: I, scan_dynlibs: bool) -> Vec<Process>
+where
+    I: Iterator<Item = &'a sysinfo::Process> + Send,
+{
+    let cache = Arc::new(Mutex::new(HashMap::new()));
+
+    processes
+        .par_bridge()
+        .filter_map(|process| {
+            match parse(process.exe(), &mut Some(Arc::clone(&cache))) {
+                Err(err) => {
+                    if let ParseError::IO(ref e) = err {
+                        if e.kind() == ErrorKind::NotFound
+                            || e.kind() == ErrorKind::PermissionDenied
+                        {
+                            return None;
+                        }
+                    }
+
+                    eprintln!(
+                        "Can not parse process {} with ID {}: {}",
+                        process.name(),
+                        process.pid(),
+                        err
+                    );
+
+                    None
+                }
+                Ok(bins) => Some(
+                    bins.into_iter()
+                        .map(|bin| {
+                            Process::new(
+                                process.pid().as_u32() as usize,
+                                bin,
+                                if scan_dynlibs {
+                                    parse_process_libraries(
+                                        process,
+                                        &mut Some(Arc::clone(&cache)),
+                                    )
+                                    .ok()
+                                } else {
+                                    None
+                                },
+                            )
+                        })
+                        .collect::<Vec<proc::Process>>(),
+                ),
+            }
+        })
+        .flatten()
+        .collect()
+}
+
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
     let args = Command::new("checksec")
@@ -335,6 +783,18 @@ fn main() {
                 .long("json")
                 .action(ArgAction::SetTrue)
                 .help("Output in json format"),
+        )
+        .arg(
+            Arg::new("libraries")
+                .short('l')
+                .long("libraries")
+                .action(ArgAction::SetTrue)
+                .help("Include all shared loaded libraries (Linux only)")
+                .requires("directory")
+                .requires("file")
+                .requires("pid")
+                .requires("process")
+                .requires("process-all"),
         )
         .arg(
             Arg::new("maps")
@@ -390,11 +850,15 @@ fn main() {
         )
         .get_matches();
 
+    // required operation
     let file = args.get_one::<String>("file");
     let directory = args.get_one::<String>("directory");
     let procids = args.get_one::<String>("pid");
     let procname = args.get_one::<String>("process");
     let procall = args.get_flag("process-all");
+
+    // optional modifiers
+    let libraries = args.get_flag("libraries");
 
     let format = if args.get_flag("json") {
         if args.get_flag("pretty") {
@@ -411,6 +875,7 @@ fn main() {
         !args.get_flag("no-color"),
         format,
         args.get_flag("maps"),
+        libraries,
     );
 
     if procall {
@@ -418,12 +883,9 @@ fn main() {
             RefreshKind::new()
                 .with_processes(ProcessRefreshKind::new().with_cpu()),
         );
-        let mut procs: Vec<Process> = Vec::new();
-        for (pid, proc_entry) in system.processes() {
-            if let Ok(results) = parse(proc_entry.exe()) {
-                procs.push(Process::new(pid.as_u32() as usize, results));
-            }
-        }
+
+        let procs = parse_processes(system.processes().values(), libraries);
+
         print_process_results(&Processes::new(procs), &settings);
     } else if let Some(procids) = procids {
         let procids: Vec<sysinfo::Pid> = procids
@@ -441,57 +903,47 @@ fn main() {
                 .with_processes(ProcessRefreshKind::new().with_cpu()),
         );
 
-        let mut procs: Vec<Process> = Vec::new();
-        for procid in procids {
-            let process = if let Some(process) = system.process(procid) {
-                process
-            } else {
-                eprintln!("No process found with ID {procid}");
-                continue;
-            };
+        let procs = parse_processes(
+            procids
+                .iter()
+                .filter_map(|&pid| {
+                    system.process(pid).or_else(|| {
+                        eprintln!("No process found with ID {pid}");
+                        None
+                    })
+                })
+                .filter(|process| {
+                    if process.exe().is_file() {
+                        true
+                    } else {
+                        eprintln!(
+                "No valid executable found for process {} with ID {}: {}",
+                process.name(),
+                process.pid(),
+                process.exe().display()
+            );
+                        false
+                    }
+                }),
+            libraries,
+        );
 
-            if !process.exe().is_file() {
-                eprintln!(
-                    "No valid executable found for process {} with ID {}: {}",
-                    process.name(),
-                    procid,
-                    process.exe().display()
-                );
-                continue;
-            }
-
-            match parse(process.exe()) {
-                Ok(results) => {
-                    procs
-                        .push(Process::new(procid.as_u32() as usize, results));
-                }
-                Err(msg) => {
-                    eprintln!(
-                        "Can not parse process {} with ID {}: {}",
-                        process.name(),
-                        procid,
-                        msg
-                    );
-                    continue;
-                }
-            }
-        }
         print_process_results(&Processes::new(procs), &settings);
     } else if let Some(procname) = procname {
         let system = System::new_with_specifics(
             RefreshKind::new()
                 .with_processes(ProcessRefreshKind::new().with_cpu()),
         );
-        let sysprocs = system.processes_by_name(procname);
-        let mut procs: Vec<Process> = Vec::new();
-        for proc_entry in sysprocs {
-            if let Ok(results) = parse(proc_entry.exe()) {
-                procs.push(Process::new(
-                    proc_entry.pid().as_u32() as usize,
-                    results,
-                ));
-            }
-        }
+
+        let procs = parse_processes(
+            system
+                .processes_by_name(procname)
+                // TODO: processes_by_name() should return a Iterator implementing the trait Send
+                .collect::<Vec<&sysinfo::Process>>()
+                .into_iter(),
+            libraries,
+        );
+
         if procs.is_empty() {
             eprintln!("No process found matching name {procname}");
             process::exit(1);
@@ -505,7 +957,7 @@ fn main() {
             process::exit(1);
         }
 
-        walk(directory_path, &settings);
+        walk(directory_path, libraries, &settings);
     } else if let Some(file) = file {
         let file_path = Path::new(file);
 
@@ -514,9 +966,9 @@ fn main() {
             process::exit(1);
         }
 
-        match parse(file_path) {
-            Ok(results) => {
-                print_binary_results(&Binaries::new(results), &settings);
+        match parse_single_file(file_path, libraries) {
+            Ok(result) => {
+                print_binary_results(&result, &settings);
             }
             Err(msg) => {
                 eprintln!(

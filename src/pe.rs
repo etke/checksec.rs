@@ -230,7 +230,7 @@ fn get_load_config_val(
 }
 
 /// Address Space Layout Randomization: `None`, `DYNBASE`, or `HIGHENTROPYVA`
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum ASLR {
     None,
     DynamicBase,
@@ -295,7 +295,7 @@ impl fmt::Display for ASLR {
 /// object and a read-only memory-mapped version of the original file
 /// must be provided for evaluating PE32/32+ binaries.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CheckSecResults {
     /// Address Space Layout Randomization
     pub aslr: ASLR,

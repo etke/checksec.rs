@@ -1,6 +1,8 @@
 //! Implements checksec for ELF binaries
 #[cfg(feature = "color")]
 use colored::Colorize;
+#[cfg(target_os = "linux")]
+use either::Either;
 use goblin::elf::dynamic::{
     DF_1_NOW, DF_1_PIE, DF_BIND_NOW, DT_RPATH, DT_RUNPATH,
 };
@@ -9,13 +11,17 @@ use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
 use goblin::elf::Elf;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
+#[cfg(target_os = "linux")]
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "color")]
 use crate::colorize_bool;
+#[cfg(target_os = "linux")]
+use crate::ldso::{LdSoError, LdSoLookup};
 use crate::shared::{Rpath, VecRpath};
 
 /// Relocation Read-Only mode: `None`, `Partial`, or `Full`
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub enum Relro {
     None,
     Partial,
@@ -50,7 +56,7 @@ impl fmt::Display for Relro {
 }
 
 /// Position Independent Executable mode: `None`, `DSO`, or `PIE`
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PIE {
     None,
     DSO,
@@ -85,7 +91,7 @@ impl fmt::Display for PIE {
 }
 
 /// Fortification status: `Full`, `Partial`, `None` or `Undecidable`
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Fortify {
     Full,
     Partial,
@@ -140,7 +146,7 @@ impl fmt::Display for Fortify {
 /// }
 /// ```
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CheckSecResults {
     /// Stack Canary (*CFLAGS=*`-fstack-protector*`)
     pub canary: bool,
@@ -164,6 +170,8 @@ pub struct CheckSecResults {
     pub rpath: VecRpath,
     /// Run-time search path (`DT_RUNTIME`)
     pub runpath: VecRpath,
+    /// Linked dynamic libraries
+    pub dynlibs: Vec<String>,
 }
 impl CheckSecResults {
     #[must_use]
@@ -187,6 +195,11 @@ impl CheckSecResults {
             relro: elf.has_relro(),
             rpath: elf.has_rpath(),
             runpath: elf.has_runpath(),
+            dynlibs: elf
+                .libraries
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
         }
     }
 }
@@ -536,6 +549,75 @@ impl Properties for Elf<'_> {
                 }
             }
         }
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub struct LibraryLookup {
+    ldsolookup: LdSoLookup,
+}
+
+#[cfg(target_os = "linux")]
+impl LibraryLookup {
+    /// Initialize a library lookup handle for Elf files.
+    ///
+    /// # Errors
+    /// Will fail if the ld.so.conf configuration can not be read or has an
+    /// invalid format.
+    pub fn new() -> Result<Self, LdSoError> {
+        Ok(Self { ldsolookup: LdSoLookup::gen_lookup_dirs()? })
+    }
+
+    #[must_use]
+    pub fn lookup(
+        &self,
+        binarypath: &Path,
+        rpath: &VecRpath,
+        runpath: &VecRpath,
+        libfilename: &str,
+    ) -> Option<PathBuf> {
+        let parentbinpath = if let Some(parent) = binarypath.parent() {
+            parent.to_str()
+        } else {
+            None
+        };
+
+        for rpath in rpath.iter().filter_map(|rpath| match rpath {
+            Rpath::YesRW(ref str) | Rpath::Yes(ref str) => Some(str),
+            Rpath::None => None,
+        }) {
+            let rpath = if let Some(p) = parentbinpath {
+                Either::Left(rpath.replace("$ORIGIN", p))
+            } else {
+                Either::Right(rpath)
+            };
+            let path = Path::new(&rpath).join(libfilename);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+
+        if let Some(path) = self.ldsolookup.search(libfilename) {
+            return Some(path);
+        }
+
+        for runpath in runpath.iter().filter_map(|rpath| match rpath {
+            Rpath::YesRW(ref str) | Rpath::Yes(ref str) => Some(str),
+
+            Rpath::None => None,
+        }) {
+            let runpath = if let Some(p) = parentbinpath {
+                Either::Left(runpath.replace("$ORIGIN", p))
+            } else {
+                Either::Right(runpath)
+            };
+            let path = Path::new(&runpath).join(libfilename);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+
         None
     }
 }
