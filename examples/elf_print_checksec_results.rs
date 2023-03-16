@@ -12,7 +12,7 @@ fn main() {
             if let Ok(buf) = fs::read(&argv[1]) {
                 match Object::parse(&buf).unwrap() {
                     Object::Elf(elf) => {
-                        println!("{:#?}", CheckSecResults::parse(&elf))
+                        println!("{:#?}", CheckSecResults::parse(&elf));
                     }
                     _ => println!("Not an elf binary."),
                 }

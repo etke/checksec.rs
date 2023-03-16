@@ -231,12 +231,12 @@ fn get_load_config_val(
 
 /// Address Space Layout Randomization: `None`, `DYNBASE`, or `HIGHENTROPYVA`
 #[derive(Deserialize, Serialize, Debug)]
-pub enum ASLR {
+pub enum Aslr {
     None,
     DynamicBase,
     HighEntropyVa,
 }
-impl fmt::Display for ASLR {
+impl fmt::Display for Aslr {
     #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -298,7 +298,7 @@ impl fmt::Display for ASLR {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CheckSecResults {
     /// Address Space Layout Randomization
-    pub aslr: ASLR,
+    pub aslr: Aslr,
     /// Authenticode
     pub authenticode: bool,
     /// Control Flow Guard (`/guard:cf`)
@@ -436,7 +436,7 @@ pub trait Properties {
     /// check for both `IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE` *(0x0040)* and
     /// `IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA` *(0x0020)* in
     /// `DllCharacteristics` within the `IMAGE_OPTIONAL_HEADER32/64`
-    fn has_aslr(&self) -> ASLR;
+    fn has_aslr(&self) -> Aslr;
     /// check flags in the `IMAGE_LOAD_CONFIG_CODE_INTEGRITY` structure linked
     /// from `IMAGE_LOAD_CONFIG_DIRECTORY32/64` within the
     /// `IMAGE_OPTIONAL_HEADER32/64`
@@ -499,13 +499,13 @@ pub trait Properties {
     fn has_seh(&self) -> bool;
 }
 impl Properties for PE<'_> {
-    fn has_aslr(&self) -> ASLR {
+    fn has_aslr(&self) -> Aslr {
         if self.has_dynamic_base() & self.has_high_entropy_va() {
-            return ASLR::HighEntropyVa;
+            return Aslr::HighEntropyVa;
         } else if self.has_dynamic_base() {
-            return ASLR::DynamicBase;
+            return Aslr::DynamicBase;
         }
-        ASLR::None
+        Aslr::None
     }
     fn has_authenticode(&self, bytes: &[u8]) -> bool {
         // requires running platform to be Windows for verification

@@ -38,8 +38,8 @@ fn parse(bytes: &[u8]) {
                                 mach.header.cpusubtype(),
                             )
                             .unwrap_or("UNKNOWN");
-                            println!("# Machine type {}:", machine);
-                            println!("{:#?}", CheckSecResults::parse(&mach))
+                            println!("# Machine type {machine}:");
+                            println!("{:#?}", CheckSecResults::parse(&mach));
                         }
                         Archive(archive) => {
                             let fatarch = fatarch.unwrap();
@@ -50,16 +50,12 @@ fn parse(bytes: &[u8]) {
                             for member in archive.members() {
                                 match archive.extract(member, archive_bytes) {
                                     Ok(ext_bytes) => {
-                                        println!(
-                                            "# Archive member {}:",
-                                            member
-                                        );
+                                        println!("# Archive member {member}:",);
                                         parse(ext_bytes);
                                     }
                                     Err(err) => {
                                         eprintln!(
-                                            "Failed to extract member {}: {}",
-                                            member, err
+                                            "Failed to extract member {member}: {err}",
                                         );
                                     }
                                 }

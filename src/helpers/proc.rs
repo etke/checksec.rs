@@ -68,7 +68,7 @@ use std::{
     os::windows::ffi::OsStrExt,
 };
 
-use crate::binary::Binary;
+use crate::helpers::binary::Binary;
 
 #[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
 #[derive(Deserialize, Serialize)]
@@ -78,6 +78,7 @@ pub struct Region {
 }
 #[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
 impl Region {
+    #[must_use]
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
@@ -95,6 +96,7 @@ pub struct MapFlags {
 }
 #[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
 impl MapFlags {
+    #[must_use]
     #[cfg(target_os = "linux")]
     pub fn new(flagstr: &str) -> Self {
         let r = flagstr.get(0..1) == Some("r");
@@ -356,6 +358,7 @@ impl Process {
         feature = "maps",
         any(target_os = "linux", target_os = "windows")
     ))]
+    #[must_use]
     pub fn new(pid: usize, binary: Vec<Binary>) -> Self {
         match Process::parse_maps(pid) {
             Ok(maps) => Self { pid, binary, maps: Some(maps) },
@@ -367,6 +370,9 @@ impl Process {
             }
         }
     }
+    /// # Errors
+    ///
+    /// Will return `ErrorKind::InvalidData` if unable to parse /proc/{pid}/maps
     #[cfg(all(feature = "maps", target_os = "linux"))]
     pub fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, Error> {
         let mut maps = Vec::new();
@@ -394,6 +400,8 @@ impl Process {
         }
         Ok(maps)
     }
+
+   
 
     #[cfg(all(feature = "maps", target_os = "windows"))]
     fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, Error> {
@@ -460,6 +468,7 @@ pub struct Processes {
     pub processes: Vec<Process>,
 }
 impl Processes {
+    #[must_use]
     pub fn new(processes: Vec<Process>) -> Self {
         Self { processes }
     }

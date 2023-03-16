@@ -46,10 +46,11 @@
 
 #[cfg(feature = "elf")]
 pub mod elf;
+#[cfg(feature = "helpers")]
+pub mod helpers;
 #[cfg(feature = "macho")]
 pub mod macho;
 pub mod macros;
-pub mod output;
 #[cfg(feature = "pe")]
 pub mod pe;
 #[cfg(feature = "shared")]

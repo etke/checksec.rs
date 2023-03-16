@@ -49,58 +49,186 @@ For instances where you want to compile for a different target OS or architectur
 
 ## Usage
 
+**Note:** command line args/options have changed as of version `0.1.0`
+
 ```sh
-USAGE:
-    checksec [FLAGS] [OPTIONS]
+$ checksec
+Fast multi-platform (ELF/PE/MachO) binary checksec command line utility and library.
 
-FLAGS:
-    -h, --help           Prints help information
-    -j, --json           Output in json format
-        --pretty         Human readable json output
-    -P, --process-all    Check all running processes
-    -V, --version        Prints version information
+Usage: checksec <COMMAND> [OPTIONS]
 
-OPTIONS:
-    -d, --directory <DIRECTORY>    Target directory
-    -f, --file <FILE>              Target file
-    -p, --process <NAME>           Name of running process to check
+Commands:
+  blob     Scan binaries or compressed archives by path
+  process  Scan binaries by process
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --no-color         Disables color output
+      --format <FORMAT>  Output format [default: text] [possible values: text, json, json-pretty]
+  -h, --help             Print help information
+  -V, --version          Print version information
 ```
 
-### Example
+## Subcommands usage
+
+### blob
+
+```sh
+$ checksec blob
+Scan binaries or compressed archives by path
+
+Usage: checksec blob [OPTIONS] [PATHS]
+       command | checksec blob [OPTIONS] --stdin
+
+Arguments:
+  [PATHS]...
+
+Options:
+  -s, --stdin            Read paths from stdin
+      --no-color         Disables color output
+      --format <FORMAT>  Output format [default: text] [possible values: text, json, json-pretty]
+  -h, --help             Print help information
+```
+
+### process
+
+```sh
+$ checksec process
+Scan binaries by process
+
+Usage: checksec process <command> [OPTIONS]
+
+Commands:
+  all   Scan all running processes
+  id    Scan processes by PID
+  name  Scan processes by name
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --no-color         Disables color output
+      --format <FORMAT>  Output format [default: text] [possible values: text, json, json-pretty]
+  -h, --help             Print help information
+```
+
+#### process all
+
+```sh
+$ checksec process all -h
+Scan all running processes
+
+Usage: checksec process all [OPTIONS]
+
+Options:
+  -m, --maps             Include process memory maps (linux/windows only)
+      --no-color         Disables color output
+      --format <FORMAT>  Output format [default: text] [possible values: text, json, json-pretty]
+  -h, --help             Print help information
+```
+
+#### process id
+
+```sh
+$ checksec process id
+Scan processes by PID
+
+Usage: checksec process id [OPTIONS] <PIDS>
+       command | checksec process id [OPTIONS] --stdin
+
+Arguments:
+  [PIDS]...
+
+Options:
+  -m, --maps             Include process memory maps (linux/windows only)
+  -s, --stdin            Read process ids from stdin
+      --no-color         Disables color output
+      --format <FORMAT>  Output format [default: text] [possible values: text, json, json-pretty]
+  -h, --help             Print help information
+```
+
+### Examples
 
 #### standalone checksec
 
-##### individual binary
+##### individual blob (binary/compressed archive)
 
 ```sh
-$ checksec -f test/binaries/true-x86_64
-ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 2 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File: test/binaries/true-x86_64
+$ checksec blob test/binaries/true-x86_64
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  2 Fortifiable:  2 NX: true  PIE: None Relro: Partial RPATH: None RUNPATH: None | File: test/binaries/true-x86_64
+# or from stdin
+$ echo "test/binaries/true-x86_64" | checksec blob --stdin
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  2 Fortifiable:  2 NX: true  PIE: None Relro: Partial RPATH: None RUNPATH: None | File: test/binaries/true-x86_64
 ```
 
-##### individual binary (json output)
+##### individual blob (binary/compressed archive) (JSON output)
 
 ```sh
-$ checksec -f test/binaries/true-x86_64 --json
-{"binaries":[{"binarytype":"Elf64","file":"test/binaries/true-x86_64","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":false,"fortified":2,"fortify":true,"nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}]}
+$ checksec blob --format json test/binaries/true-x86_64
+{"binaries":[{"binarytype":"Elf64","file":"test/binaries/true-x86_64","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":false,"fortifiable":2,"fortified":2,"fortify":"Partial","nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}]}
+```
+
+##### multiple blobs via stdin
+
+```sh
+# newline delminated
+$ dpkg -L dpkg | target/release/checksec blob --stdin 2>/dev/null
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  9 Fortifiable:  3 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /sbin/start-stop-daemon
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified: 10 Fortifiable:  8 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  9 Fortifiable:  5 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg-deb
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  9 Fortifiable:  6 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg-divert
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  9 Fortifiable:  7 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg-query
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable:  5 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg-split
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable:  5 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg-statoverride
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  9 Fortifiable:  5 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/dpkg-trigger
+ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  5 Fortifiable:  3 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/update-alternatives
 ```
 
 ##### running processes
 
 ```sh
-$ checksec -P
--zsh(34)
- ↪ ELF64: | Canary: true CFI: false SafeStack: false Fortify: true Fortified: 8 NX: true PIE: Full Relro: Full RPATH: None RUNPATH: None | File: /bin/zsh
+$ checksec process all
+zsh(34)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable: 19 NX: true  PIE: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/zsh
 checksec(216)
- ↪ ELF64: | Canary: false CFI: false SafeStack: false Fortify: false Fortified: 0 NX: true PIE: Full Relro: Full RPATH: None RUNPATH: None | File: /home/etke/.cargo/bin/checksec
-init(1)
- ↪ ELF64: | Canary: false CFI: false SafeStack: false Fortify: false Fortified: 0 NX: true PIE: None Relro: Partial RPATH: None RUNPATH: None | File: /init
+↪ ELF64: | Canary: false CFI: false SafeStack: false Fortify: None        Fortified:  0 Fortifiable:  8 NX: true  PIE: Full Relro: Full    RPATH: None RUNPATH: None | File: /home/etke/.cargo/bin/checksec
 ```
 
-##### running processes (json output)
+##### running processes (JSON output)
 
 ```sh
-$ checksec -P --json
+$ checksec process all --format json
 {"processes":[{"binary":[{"binarytype":"Elf64","file":"/bin/zsh","properties":{"Elf":{"canary":true,"clang_cfi":false,"clang_safestack":false,"fortified":8,"fortify":true,"nx":true,"pie":"PIE","relro":"Full","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}],"pid":34},{"binary":[{"binarytype":"Elf64","file":"/init","properties":{"Elf":{"canary":false,"clang_cfi":false,"clang_safestack":false,"fortified":0,"fortify":false,"nx":true,"pie":"None","relro":"Partial","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}],"pid":1},{"binary":[{"binarytype":"Elf64","file":"/home/etke/.cargo/bin/checksec","properties":{"Elf":{"canary":false,"clang_cfi":false,"clang_safestack":false,"fortified":0,"fortify":false,"nx":true,"pie":"PIE","relro":"Full","rpath":{"paths":["None"]},"runpath":{"paths":["None"]}}}}],"pid":232}]}
+```
+
+##### running processes with name(s)
+
+```sh
+$ checksec process name zsh
+zsh(34)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable: 19 NX: true  PIE: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/zsh
+# or from stdin (space delimited)
+$ echo "zsh vim" | checksec process name --stdin
+# or from stdin (newline delimited)
+$ printf "zsh\vim" | checksec process name --stdin
+vim(4567)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified: 10 Fortifiable: 18 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/vim
+zsh(1234)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable: 19 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/zsh
+```
+
+##### running process by id(s)
+
+```sh
+$ checksec process id 1234
+zsh(1234)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable: 19 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/zsh
+# or from stdin (space delimited)
+$ pidof zsh | checksec process id --stdin
+# or from stdin (newline delimited)
+$ pgrep zsh | checksec process id --stdin
+zsh(4567)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable: 19 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/zsh
+zsh(1234)
+ ↪ ELF64: | Canary: true  CFI: false SafeStack: false Fortify: Partial     Fortified:  8 Fortifiable: 19 NX: true  Pie: Full Relro: Full    RPATH: None RUNPATH: None | File: /usr/bin/zsh
 ```
 
 #### libchecksec

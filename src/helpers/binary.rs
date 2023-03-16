@@ -9,11 +9,11 @@ use std::path::PathBuf;
 use std::{fmt, usize};
 
 #[cfg(feature = "elf")]
-use checksec::elf;
+use crate::elf;
 #[cfg(feature = "macho")]
-use checksec::macho;
+use crate::macho;
 #[cfg(feature = "pe")]
-use checksec::pe;
+use crate::pe;
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum BinType {

@@ -49,15 +49,15 @@ impl fmt::Display for Relro {
     }
 }
 
-/// Position Independent Executable mode: `None`, `DSO`, or `PIE`
+/// Position Independent Executable mode: `None`, `Dso`, or `Pie`
 #[derive(Debug, Deserialize, Serialize)]
-pub enum PIE {
+pub enum Pie {
     None,
-    DSO,
-    PIE,
+    Dso,
+    Pie,
 }
 
-impl fmt::Display for PIE {
+impl fmt::Display for Pie {
     #[cfg(not(feature = "color"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -65,8 +65,8 @@ impl fmt::Display for PIE {
             "{:<4}",
             match *self {
                 Self::None => "None",
-                Self::DSO => "DSO",
-                Self::PIE => "Full",
+                Self::Dso => "DSO",
+                Self::Pie => "Full",
             }
         )
     }
@@ -77,8 +77,8 @@ impl fmt::Display for PIE {
             "{:<4}",
             match *self {
                 Self::None => "None".red(),
-                Self::DSO => "DSO".yellow(),
-                Self::PIE => "Full".green(),
+                Self::Dso => "DSO".yellow(),
+                Self::Pie => "Full".green(),
             }
         )
     }
@@ -157,7 +157,7 @@ pub struct CheckSecResults {
     /// No Execute
     pub nx: bool,
     /// Position Inpendent Executable (*CFLAGS=*`-pie -fPIE`)
-    pub pie: PIE,
+    pub pie: Pie,
     /// Relocation Read-Only
     pub relro: Relro,
     /// Run-time search path (`DT_RPATH`)
@@ -276,7 +276,7 @@ pub trait Properties {
     /// check `p_flags` of the `PT_GNU_STACK` ELF header
     fn has_nx(&self) -> bool;
     /// check `d_val` of `DT_FLAGS`/`DT_FLAGS_1` of the `PT_DYN ELF` header
-    fn has_pie(&self) -> PIE;
+    fn has_pie(&self) -> Pie;
     /// check `d_val` is `DF_BIND_NOW` for `DT_FLAGS`/`DT_FLAGS_1` of the
     /// `PT_GNU_RELRO ELF` program header
     fn has_relro(&self) -> Relro;
@@ -473,16 +473,16 @@ impl Properties for Elf<'_> {
         }
         false
     }
-    fn has_pie(&self) -> PIE {
+    fn has_pie(&self) -> Pie {
         if self.header.e_type == ET_DYN {
             if let Some(dynamic) = &self.dynamic {
                 if DF_1_PIE & dynamic.info.flags_1 == DF_1_PIE {
-                    return PIE::PIE;
+                    return Pie::Pie;
                 }
             }
-            return PIE::DSO;
+            return Pie::Dso;
         }
-        PIE::None
+        Pie::None
     }
     fn has_relro(&self) -> Relro {
         for header in &self.program_headers {
