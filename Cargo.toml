@@ -40,7 +40,7 @@ scroll_derive = "0.11.0"
 serde = {version = "1.0.145", features = ["derive"]}
 serde_derive = "1.0.145"
 serde_json = "1.0.86"
-sysinfo = "0.26.4"
+sysinfo = "0.28.2"
 
 [target.'cfg(target_os="windows")'.dependencies]
 windows = {version = "0.42.0", features = [
