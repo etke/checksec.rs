@@ -1,3 +1,4 @@
+#[cfg(feature = "color")]
 use colored::Colorize;
 use ignore::Walk;
 use sysinfo::{

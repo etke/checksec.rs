@@ -1,21 +1,14 @@
-#[cfg(all(
-    feature = "color",
-    feature = "maps",
-    not(target_os = "macos")
-))]
+#[cfg(all(feature = "color", feature = "maps"))]
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
-#[cfg(all(feature = "maps", not(target_os = "macos")))]
+#[cfg(feature = "maps")]
 use std::fmt;
 
+#[cfg(feature = "maps")]
+use std::path::PathBuf;
 use std::usize;
 #[cfg(all(feature = "maps", target_os = "linux"))]
 use std::{fs, io::ErrorKind};
-#[cfg(all(
-    feature = "maps",
-    any(target_os = "linux", target_os = "windows")
-))]
-use std::{io::Error, path::PathBuf};
 
 #[cfg(all(feature = "maps", target_os = "windows"))]
 use windows::Win32::{
@@ -68,15 +61,86 @@ use std::{
     os::windows::ffi::OsStrExt,
 };
 
+#[cfg(all(feature = "maps", target_os = "macos"))]
+use darwin_libproc_sys::proc_regionfilename;
+
+#[cfg(all(feature = "maps", target_os = "macos"))]
+use mach2::{
+    kern_return::KERN_SUCCESS,
+    // mach_types::task_name_t,
+    mach_types::vm_task_entry_t,
+    message::mach_msg_type_number_t,
+    port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL},
+    // task::task_info,
+    // task_info::{task_dyld_info, TASK_DYLD_INFO},
+    traps::{mach_task_self, task_for_pid},
+    vm_prot::{VM_PROT_EXECUTE, VM_PROT_READ, VM_PROT_WRITE},
+    vm_region::{
+        vm_region_basic_info_64_t, vm_region_basic_info_data_t,
+        VM_REGION_BASIC_INFO,
+    },
+    vm_types::{
+        mach_vm_address_t,
+        mach_vm_size_t,
+        // natural_t
+    },
+};
+
 use crate::helpers::binary::Binary;
 
-#[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
+#[cfg(all(feature = "maps", target_os = "macos"))]
+const PROC_PIDPATHINFO_MAXSIZE: usize = 4096usize;
+
+#[cfg(feature = "maps")]
+pub enum ProcessError {
+    Io(std::io::Error),
+    Utf8(std::string::FromUtf8Error),
+    Int(std::num::TryFromIntError),
+    IoErrorKind(std::io::ErrorKind),
+}
+#[cfg(feature = "maps")]
+impl fmt::Display for ProcessError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Int(e) => e.fmt(f),
+            Self::Io(e) => e.fmt(f),
+            Self::IoErrorKind(e) => e.fmt(f),
+            Self::Utf8(e) => e.fmt(f),
+        }
+    }
+}
+#[cfg(feature = "maps")]
+impl From<std::num::TryFromIntError> for ProcessError {
+    fn from(err: std::num::TryFromIntError) -> ProcessError {
+        ProcessError::Int(err)
+    }
+}
+#[cfg(feature = "maps")]
+impl From<std::io::Error> for ProcessError {
+    fn from(err: std::io::Error) -> ProcessError {
+        ProcessError::Io(err)
+    }
+}
+#[cfg(feature = "maps")]
+impl From<std::io::ErrorKind> for ProcessError {
+    fn from(err: std::io::ErrorKind) -> ProcessError {
+        ProcessError::IoErrorKind(err)
+    }
+}
+#[cfg(feature = "maps")]
+impl From<std::string::FromUtf8Error> for ProcessError {
+    fn from(err: std::string::FromUtf8Error) -> ProcessError {
+        ProcessError::Utf8(err)
+    }
+}
+
+#[cfg(feature = "maps")]
 #[derive(Deserialize, Serialize)]
 pub struct Region {
     pub start: usize,
     pub end: usize,
 }
-#[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
+#[cfg(feature = "maps")]
 impl Region {
     #[must_use]
     pub fn new(start: usize, end: usize) -> Self {
@@ -85,7 +149,7 @@ impl Region {
 }
 
 #[allow(clippy::struct_excessive_bools)]
-#[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
+#[cfg(feature = "maps")]
 #[derive(Deserialize, Serialize)]
 pub struct MapFlags {
     pub r: bool,
@@ -94,7 +158,7 @@ pub struct MapFlags {
     #[cfg(all(feature = "maps", target_os = "windows"))]
     pub guard: bool,
 }
-#[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
+#[cfg(feature = "maps")]
 impl MapFlags {
     #[must_use]
     #[cfg(target_os = "linux")]
@@ -102,6 +166,13 @@ impl MapFlags {
         let r = flagstr.get(0..1) == Some("r");
         let w = flagstr.get(1..2) == Some("w");
         let x = flagstr.get(2..3) == Some("x");
+        Self { r, w, x }
+    }
+    #[cfg(target_os = "macos")]
+    pub fn new(prot: i32) -> Self {
+        let r = prot & VM_PROT_READ == 0;
+        let w = prot & VM_PROT_WRITE == 0;
+        let x = prot & VM_PROT_EXECUTE == 0;
         Self { r, w, x }
     }
     #[cfg(target_os = "windows")]
@@ -127,13 +198,9 @@ impl MapFlags {
         Self { r, w, x, guard }
     }
 }
-#[cfg(all(
-    not(feature = "color"),
-    feature = "maps",
-    any(target_os = "linux", target_os = "windows")
-))]
+#[cfg(all(not(feature = "color"), feature = "maps",))]
 impl fmt::Display for MapFlags {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -155,13 +222,9 @@ impl fmt::Display for MapFlags {
         )
     }
 }
-#[cfg(all(
-    feature = "color",
-    feature = "maps",
-    any(target_os = "linux", target_os = "windows")
-))]
+#[cfg(all(feature = "color", feature = "maps"))]
 impl fmt::Display for MapFlags {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.r & self.w & self.x {
             return write!(f, "{}", "rwx".red());
@@ -210,20 +273,19 @@ impl fmt::Display for MapType {
     }
 }
 
-#[cfg(all(feature = "maps", any(target_os = "linux", target_os = "windows")))]
+#[cfg(feature = "maps")]
 #[derive(Deserialize, Serialize)]
 pub struct MapEntry {
     pub region: Region,
     pub flags: MapFlags,
+    #[cfg(all(feature = "maps", target_os = "macos"))]
+    pub max_flags: MapFlags,
     pub pathname: Option<PathBuf>,
     #[cfg(all(feature = "maps", target_os = "windows"))]
     pub etype: MapType,
 }
-#[cfg(all(
-    not(feature = "color"),
-    feature = "maps",
-    any(target_os = "linux", target_os = "windows")
-))]
+
+#[cfg(all(not(feature = "color"), feature = "maps"))]
 impl fmt::Display for MapEntry {
     #[cfg(target_os = "linux")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -233,6 +295,21 @@ impl fmt::Display for MapEntry {
             self.region.start,
             self.region.end,
             self.flags,
+            match &self.pathname {
+                Some(pathname) => pathname.display().to_string(),
+                None => "".to_string(),
+            }
+        )
+    }
+    #[cfg(target_os = "macos")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "0x{:x}->0x{:x} {} {} {}",
+            self.region.start,
+            self.region.end,
+            self.flags,
+            self.max_flags,
             match &self.pathname {
                 Some(pathname) => pathname.display().to_string(),
                 None => "".to_string(),
@@ -255,11 +332,7 @@ impl fmt::Display for MapEntry {
         )
     }
 }
-#[cfg(all(
-    feature = "color",
-    feature = "maps",
-    any(target_os = "linux", target_os = "windows")
-))]
+#[cfg(all(feature = "color", feature = "maps"))]
 impl fmt::Display for MapEntry {
     #[cfg(target_os = "linux")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -291,6 +364,40 @@ impl fmt::Display for MapEntry {
             )
         }
     }
+    #[cfg(target_os = "macos")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.flags.r & self.flags.w & self.flags.x {
+            write!(
+                f,
+                "{} {}",
+                format!(
+                    "0x{:x}->0x{:x} {} {}",
+                    self.region.start,
+                    self.region.end,
+                    self.flags,
+                    self.max_flags
+                )
+                .red(),
+                match &self.pathname {
+                    Some(pathname) => pathname.display().to_string().red(),
+                    None => String::new().red(),
+                }
+            )
+        } else {
+            write!(
+                f,
+                "0x{:x}->0x{:x} {} {} {}",
+                self.region.start,
+                self.region.end,
+                self.flags,
+                self.max_flags,
+                match &self.pathname {
+                    Some(pathname) => pathname.display().to_string(),
+                    None => String::new(),
+                }
+            )
+        }
+    }
     #[cfg(target_os = "windows")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.flags.r & self.flags.w & self.flags.x && !self.flags.guard {
@@ -304,7 +411,7 @@ impl fmt::Display for MapEntry {
                 .red(),
                 match &self.pathname {
                     Some(pathname) => pathname.display().to_string().red(),
-                    None => "".to_string().red(),
+                    None => String::new().red(),
                 },
                 format!("{}", self.etype).red()
             )
@@ -317,7 +424,7 @@ impl fmt::Display for MapEntry {
                 self.flags,
                 match &self.pathname {
                     Some(pathname) => pathname.display().to_string(),
-                    None => "".to_string(),
+                    None => String::new(),
                 },
                 self.etype,
             )
@@ -343,21 +450,15 @@ impl WinProcInfo {
 pub struct Process {
     pub pid: usize,
     pub binary: Vec<Binary>,
-    #[cfg(all(
-        feature = "maps",
-        any(target_os = "linux", target_os = "windows")
-    ))]
+    #[cfg(feature = "maps")]
     pub maps: Option<Vec<MapEntry>>,
 }
 impl Process {
-    #[cfg(any(not(feature = "maps"), target_os = "macos"))]
+    #[cfg(not(feature = "maps"))]
     pub fn new(pid: usize, binary: Vec<Binary>) -> Self {
         Self { pid, binary }
     }
-    #[cfg(all(
-        feature = "maps",
-        any(target_os = "linux", target_os = "windows")
-    ))]
+    #[cfg(all(feature = "maps"))]
     #[must_use]
     pub fn new(pid: usize, binary: Vec<Binary>) -> Self {
         match Process::parse_maps(pid) {
@@ -374,7 +475,7 @@ impl Process {
     ///
     /// Will return `ErrorKind::InvalidData` if unable to parse /proc/{pid}/maps
     #[cfg(all(feature = "maps", target_os = "linux"))]
-    pub fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, Error> {
+    pub fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, ProcessError> {
         let mut maps = Vec::new();
         for line in fs::read_to_string(format!("/proc/{pid}/maps"))?.lines() {
             let mut split_line = line.split_whitespace();
@@ -401,13 +502,37 @@ impl Process {
         Ok(maps)
     }
 
-   
+    #[cfg(all(feature = "maps", target_os = "macos"))]
+    pub fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, ProcessError> {
+        let mut maps = Vec::new();
+        let mut task: mach_port_name_t = MACH_PORT_NULL;
+
+        if unsafe {
+            task_for_pid(mach_task_self(), i32::try_from(pid)?, &mut task)
+        } != KERN_SUCCESS
+        {
+            return Err(ProcessError::Io(std::io::Error::last_os_error()));
+        }
+
+        let init_mapentry = mach_vm_map_entry(pid, task, 1)?;
+        let mut prev_region_end = init_mapentry.region.end;
+        maps.push(init_mapentry);
+
+        while let Ok(entry) =
+            mach_vm_map_entry(pid, task, prev_region_end.try_into()?)
+        {
+            prev_region_end = entry.region.end;
+            maps.push(entry);
+        }
+
+        Ok(maps)
+    }
 
     #[cfg(all(feature = "maps", target_os = "windows"))]
-    fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, Error> {
+    fn parse_maps(pid: usize) -> Result<Vec<MapEntry>, ProcessError> {
         let mut maps: Vec<MapEntry> = Vec::new();
         if let Err(e) = set_debug_privilege() {
-            eprintln!("Unable to adjust token privileges. Reason: {}", e);
+            eprintln!("Unable to adjust token privileges. Reason: {e}");
         };
 
         #[allow(clippy::cast_possible_truncation)]
@@ -431,21 +556,18 @@ impl Process {
                 let proc = WinProcInfo::new(pid as u32, hprocess, hsnapshot);
                 if let Err(e) = fetch_modules(&proc, &mut maps) {
                     eprintln!(
-                        "Unable to fetch modules for pid {}. Reason: {}",
-                        pid, e
+                        "Unable to fetch modules for pid {pid}. Reason: {e}",
                     );
                 };
                 if let Err(e) = fetch_stacks(&proc, &mut maps) {
                     eprintln!(
-                        "Unable to fetch stacks for pid {}. Reason: {}",
-                        pid, e
+                        "Unable to fetch stacks for pid {pid}. Reason: {e}",
                     );
                 };
 
                 if let Err(e) = fetch_heaps(&proc, &mut maps) {
                     eprintln!(
-                        "Unable to fetch heaps for pid {}. Reason: {}",
-                        pid, e
+                        "Unable to fetch heaps for pid {pid}. Reason: {e}",
                     );
                 };
 
@@ -458,7 +580,7 @@ impl Process {
             return Ok(maps);
         }
 
-        Err(Error::last_os_error())
+        Err(ProcessError::Io(std::io::Error::last_os_error()))
     }
 }
 
@@ -475,7 +597,7 @@ impl Processes {
 }
 
 #[cfg(all(feature = "maps", target_os = "windows"))]
-fn set_debug_privilege() -> Result<(), Error> {
+fn set_debug_privilege() -> Result<(), ProcessError> {
     let mut htoken = HANDLE::default();
     if unsafe {
         OpenProcessToken(
@@ -520,12 +642,12 @@ fn set_debug_privilege() -> Result<(), Error> {
             }
             .as_bool()
             {
-                return Err(Error::last_os_error());
+                return Err(ProcessError::Io(std::io::Error::last_os_error()));
             }
         }
         unsafe { CloseHandle(htoken) };
     } else {
-        return Err(Error::last_os_error());
+        return Err(ProcessError::Io(std::io::Error::last_os_error()));
     }
 
     Ok(())
@@ -535,7 +657,7 @@ fn set_debug_privilege() -> Result<(), Error> {
 fn fetch_modules(
     proc: &WinProcInfo,
     maps: &mut Vec<MapEntry>,
-) -> Result<u32, Error> {
+) -> Result<u32, ProcessError> {
     let mut entries = 0_u32;
 
     let mut lpme = unsafe { mem::zeroed::<MODULEENTRY32W>() };
@@ -565,7 +687,7 @@ fn fetch_modules(
             )
         };
         if retsize != size {
-            return Err(Error::last_os_error());
+            return Err(ProcessError::Io(std::io::Error::last_os_error()));
         }
 
         let flags = MapFlags::new(lpbuffer.Protect);
@@ -593,7 +715,7 @@ fn fetch_modules(
 fn fetch_heaps(
     proc: &WinProcInfo,
     maps: &mut Vec<MapEntry>,
-) -> Result<u32, Error> {
+) -> Result<u32, ProcessError> {
     let mut entries = 0_u32;
     let mut lphl = unsafe { mem::zeroed::<HEAPLIST32>() };
     lphl.dwSize = mem::size_of::<HEAPLIST32>();
@@ -644,7 +766,9 @@ fn fetch_heaps(
                     )
                 };
                 if retsize != size {
-                    return Err(Error::last_os_error());
+                    return Err(ProcessError::Io(
+                        std::io::Error::last_os_error(),
+                    ));
                 }
 
                 heap_flags.push(MapFlags::new(lpbuffer.Protect));
@@ -668,7 +792,7 @@ fn fetch_heaps(
             cur_heap = unsafe { Heap32ListNext(proc.hsnapshot, &mut lphl) };
         }
     } else {
-        return Err(Error::last_os_error());
+        return Err(ProcessError::Io(std::io::Error::last_os_error()));
     }
     Ok(entries)
 }
@@ -678,7 +802,7 @@ fn fetch_heaps(
 fn fetch_stacks(
     proc: &WinProcInfo,
     maps: &mut Vec<MapEntry>,
-) -> Result<u32, Error> {
+) -> Result<u32, ProcessError> {
     let mut entries = 0_u32;
     let mut lpte = unsafe { mem::zeroed::<THREADENTRY32>() };
     #[allow(clippy::cast_possible_truncation)]
@@ -752,16 +876,97 @@ fn fetch_stacks(
                         }
                         entries += 1_u32;
                     } else {
-                        return Err(Error::last_os_error());
+                        return Err(ProcessError::Io(
+                            std::io::Error::last_os_error(),
+                        ));
                     }
                 } else {
-                    return Err(Error::last_os_error());
+                    return Err(ProcessError::Io(
+                        std::io::Error::last_os_error(),
+                    ));
                 }
             }
             cur_thread = unsafe { Thread32Next(proc.hsnapshot, &mut lpte) };
         }
     } else {
-        return Err(Error::last_os_error());
+        return Err(ProcessError::Io(std::io::Error::last_os_error()));
     }
     Ok(entries)
+}
+
+#[cfg(all(feature = "maps", target_os = "macos"))]
+fn mach_vm_map_entry(
+    pid: usize,
+    task: mach_port_name_t,
+    mut address: mach_vm_address_t,
+) -> Result<MapEntry, ProcessError> {
+    let mut region_count =
+        mach_msg_type_number_t::try_from(std::mem::size_of::<
+            vm_region_basic_info_64_t,
+        >())
+        .unwrap();
+    let mut obj_name: mach_port_t = 0;
+    let mut region_size = unsafe { std::mem::zeroed::<mach_vm_size_t>() };
+    let mut region_info =
+        unsafe { std::mem::zeroed::<vm_region_basic_info_data_t>() };
+
+    if unsafe {
+        mach2::vm::mach_vm_region(
+            task as vm_task_entry_t,
+            &mut address,
+            &mut region_size,
+            VM_REGION_BASIC_INFO,
+            std::ptr::addr_of_mut!(region_info).cast::<i32>(),
+            &mut region_count,
+            &mut obj_name,
+        )
+    } != KERN_SUCCESS
+    {
+        return Err(ProcessError::Io(std::io::Error::last_os_error()));
+    }
+    let region = Region::new(
+        usize::try_from(address)?,
+        usize::try_from(address + region_size)?,
+    );
+    let flags = MapFlags::new(region_info.protection);
+    let max_flags = MapFlags::new(region_info.max_protection);
+    let pathname = match region_filename(pid, address) {
+        Ok(pathname) => Some(pathname),
+        Err(_) => None,
+    };
+
+    Ok(MapEntry { region, flags, max_flags, pathname })
+}
+
+#[cfg(all(feature = "maps", target_os = "macos"))]
+fn region_filename(pid: usize, address: u64) -> Result<PathBuf, ProcessError> {
+    let mut buf: Vec<u8> = Vec::with_capacity(PROC_PIDPATHINFO_MAXSIZE - 1);
+    let buffer_ptr = buf.as_mut_ptr().cast::<libc::c_void>();
+    let buffer_size = buf.capacity();
+
+    if unsafe {
+        proc_regionfilename(
+            i32::try_from(pid)?,
+            address,
+            buffer_ptr,
+            u32::try_from(buffer_size)?,
+        )
+    } != KERN_SUCCESS
+    {
+        return Err(ProcessError::Io(std::io::Error::last_os_error()));
+    }
+
+    if unsafe {
+        proc_regionfilename(
+            i32::try_from(pid)?,
+            address,
+            buffer_ptr,
+            u32::try_from(buffer_size)?,
+        )
+    } != KERN_SUCCESS
+    {
+        return Err(ProcessError::Io(std::io::Error::last_os_error()));
+    }
+
+    Ok(String::from_utf8(buf)?.into())
 }

@@ -49,7 +49,7 @@ impl Settings {
     }
     #[must_use]
     #[cfg(not(feature = "color"))]
-    pub fn set(format: Format, maps: bool) -> Self {
+    pub fn set(format: Format) -> Self {
         Self { format }
     }
 }
@@ -86,7 +86,7 @@ pub fn print_binary_results(binaries: &Binaries, settings: &Settings) {
 pub fn print_process_results(
     processes: &Processes,
     settings: &Settings,
-    maps: bool,
+    #[cfg(feature = "maps")] maps: bool,
 ) {
     match settings.format {
         Format::Json => {
@@ -122,10 +122,7 @@ pub fn print_process_results(
                         binary
                     );
                 }
-                #[cfg(all(
-                    feature = "maps",
-                    any(target_os = "linux", target_os = "windows")
-                ))]
+                #[cfg(feature = "maps")]
                 if maps {
                     if let Some(maps) = &process.maps {
                         println!("{:>12}", "\u{21aa} Maps:");

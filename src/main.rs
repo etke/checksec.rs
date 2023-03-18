@@ -88,7 +88,8 @@ enum Commands {
 enum ProcCommands {
     /// Scan all running processes
     All {
-        /// Include process memory maps (linux/windows only)
+        /// Include process memory maps
+        #[cfg(feature = "maps")]
         #[arg(short, long, default_value_t = false)]
         maps: bool,
         // global options
@@ -109,8 +110,9 @@ enum ProcCommands {
     Id {
         #[arg(requires_if("false", "stdin"))]
         pids: Vec<sysinfo::Pid>,
-        /// Include process memory maps (linux/windows only)
-        #[arg(short, long)]
+        /// Include process memory maps
+        #[cfg(feature = "maps")]
+        #[arg(short, long, default_value_t = false)]
         maps: bool,
         /// Read process ids from stdin
         #[arg(short, long, default_value_t = false)]
@@ -133,8 +135,9 @@ enum ProcCommands {
     Name {
         #[arg(requires_if("false", "stdin"))]
         procnames: Vec<String>,
-        /// Include process memory maps (linux/windows only)
-        #[arg(short, long)]
+        /// Include process memory maps
+        #[cfg(feature = "maps")]
+        #[arg(short, long, default_value_t = false)]
         maps: bool,
         /// Read process names from stdin
         #[arg(short, long, default_value_t = false)]
@@ -152,7 +155,13 @@ fn main() {
     let args = Cli::parse();
 
     match args.command {
-        Commands::Blob { paths, stdin, color, format } => {
+        Commands::Blob {
+            paths,
+            stdin,
+            #[cfg(feature = "color")]
+            color,
+            format,
+        } => {
             let settings = output::Settings::set(
                 #[cfg(feature = "color")]
                 !color,
@@ -171,7 +180,14 @@ fn main() {
             print_binary_results(&Binaries::new(results), &settings);
         }
         Commands::Process { command } => match command {
-            ProcCommands::All { maps, color, format } => {
+            ProcCommands::All {
+                #[cfg(feature = "maps")]
+                maps,
+                #[cfg(feature = "color")]
+                color,
+                format,
+                ..
+            } => {
                 let settings = output::Settings::set(
                     #[cfg(feature = "color")]
                     !color,
@@ -185,10 +201,20 @@ fn main() {
                 print_process_results(
                     &Processes::new(results),
                     &settings,
+                    #[cfg(feature = "maps")]
                     maps,
                 );
             }
-            ProcCommands::Id { pids, stdin, color, maps, format } => {
+            ProcCommands::Id {
+                pids,
+                stdin,
+                #[cfg(feature = "color")]
+                color,
+                #[cfg(feature = "maps")]
+                maps,
+                format,
+                ..
+            } => {
                 let settings = output::Settings::set(
                     #[cfg(feature = "color")]
                     !color,
@@ -206,10 +232,20 @@ fn main() {
                 print_process_results(
                     &Processes::new(results),
                     &settings,
+                    #[cfg(feature = "maps")]
                     maps,
                 );
             }
-            ProcCommands::Name { procnames, stdin, color, maps, format } => {
+            ProcCommands::Name {
+                procnames,
+                stdin,
+                #[cfg(feature = "color")]
+                color,
+                #[cfg(feature = "maps")]
+                maps,
+                format,
+                ..
+            } => {
                 let settings = output::Settings::set(
                     #[cfg(feature = "color")]
                     !color,
@@ -226,6 +262,7 @@ fn main() {
                 print_process_results(
                     &Processes::new(results),
                     &settings,
+                    #[cfg(feature = "maps")]
                     maps,
                 );
             }

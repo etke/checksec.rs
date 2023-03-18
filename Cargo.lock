@@ -56,8 +56,11 @@ dependencies = [
  "clap",
  "colored",
  "colored_json",
+ "darwin-libproc-sys",
  "goblin",
  "ignore",
+ "libc",
+ "mach2",
  "memmap2",
  "scroll",
  "scroll_derive",
@@ -179,6 +182,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "darwin-libproc-sys"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef0aa083b94c54aa4cfd9bbfd37856714c139d1dc511af80270558c7ba3b4816"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "either"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -272,6 +284,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "mach2"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d0d1830bcd151a6fc4aea1369af235b36c1528fe976b8ff678683c9995eade8"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
