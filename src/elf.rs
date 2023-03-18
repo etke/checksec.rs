@@ -7,7 +7,7 @@ use goblin::elf::dynamic::{
     DF_1_NOW, DF_1_PIE, DF_BIND_NOW, DT_RPATH, DT_RUNPATH,
 };
 use goblin::elf::header::ET_DYN;
-use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
+use goblin::elf::program_header::{PT_GNU_RELRO, PT_GNU_STACK};
 use goblin::elf::Elf;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
@@ -394,6 +394,9 @@ const FORTIFIABLE_FUNCTIONS: [&str; 79] = [
 impl Properties for Elf<'_> {
     fn has_canary(&self) -> bool {
         for sym in &self.dynsyms {
+            if !sym.is_function() {
+                continue;
+            }
             if let Some(name) = self.dynstrtab.get_at(sym.st_name) {
                 match name {
                     "__stack_chk_fail" | "__intel_security_cookie" => {
@@ -408,6 +411,9 @@ impl Properties for Elf<'_> {
     #[allow(clippy::case_sensitive_file_extension_comparisons)]
     fn has_clang_cfi(&self) -> bool {
         for sym in &self.syms {
+            if !sym.is_function() {
+                continue;
+            }
             if let Some(name) = self.strtab.get_at(sym.st_name) {
                 if name.ends_with(".cfi") {
                     return true;
@@ -415,6 +421,9 @@ impl Properties for Elf<'_> {
             }
         }
         for sym in &self.dynsyms {
+            if !sym.is_function() {
+                continue;
+            }
             if let Some(name) = self.dynstrtab.get_at(sym.st_name) {
                 if name.ends_with(".cfi") || name == "__cfi_init" {
                     return true;
@@ -425,6 +434,9 @@ impl Properties for Elf<'_> {
     }
     fn has_clang_safestack(&self) -> bool {
         for sym in &self.dynsyms {
+            if !sym.is_function() {
+                continue;
+            }
             if let Some(name) = self.dynstrtab.get_at(sym.st_name) {
                 if name == "__safestack_init" {
                     return true;
@@ -478,10 +490,7 @@ impl Properties for Elf<'_> {
     fn has_nx(&self) -> bool {
         for header in &self.program_headers {
             if header.p_type == PT_GNU_STACK {
-                if PF_X != header.p_flags & PF_X {
-                    return true;
-                }
-                break;
+                return !header.is_executable();
             }
         }
         false
