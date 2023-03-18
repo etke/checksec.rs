@@ -44,6 +44,8 @@
 //! `*CheckSecResults` structs.
 //!
 
+#[cfg(feature = "disassembly")]
+pub mod disassembly;
 #[cfg(feature = "elf")]
 pub mod elf;
 #[cfg(target_os = "linux")]

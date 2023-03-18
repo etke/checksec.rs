@@ -59,6 +59,7 @@ dependencies = [
  "either",
  "glob",
  "goblin",
+ "iced-x86",
  "ignore",
  "itertools",
  "memmap2",
@@ -217,6 +218,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "iced-x86"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dd04b950d75b3498320253b17fb92745b2cc79ead8814aede2f7c1bab858bec"
+dependencies = [
+ "lazy_static",
 ]
 
 [[package]]
