@@ -7,7 +7,7 @@ use goblin::elf::dynamic::{
     DF_1_NOW, DF_1_PIE, DF_BIND_NOW, DT_RPATH, DT_RUNPATH,
 };
 use goblin::elf::header::ET_DYN;
-use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
+use goblin::elf::program_header::{PT_GNU_RELRO, PT_GNU_STACK};
 use goblin::elf::Elf;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
@@ -478,10 +478,7 @@ impl Properties for Elf<'_> {
     fn has_nx(&self) -> bool {
         for header in &self.program_headers {
             if header.p_type == PT_GNU_STACK {
-                if PF_X != header.p_flags & PF_X {
-                    return true;
-                }
-                break;
+                return !header.is_executable();
             }
         }
         false
