@@ -8,10 +8,10 @@ extern crate ignore;
 extern crate serde_json;
 extern crate sysinfo;
 
-use clap::{
-    crate_authors, crate_description, crate_version, Arg, ArgAction, ArgGroup,
-    Command,
-};
+use clap::CommandFactory;
+use clap::Parser;
+use clap::Subcommand;
+use clap::{arg, command};
 #[cfg(all(feature = "maps", target_os = "linux"))]
 use either::Either;
 use goblin::error::Error;
@@ -33,13 +33,12 @@ use std::collections::HashMap;
 #[cfg(all(target_os = "linux", feature = "elf"))]
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::io::ErrorKind;
+use std::io::{BufRead, ErrorKind};
 #[cfg(all(feature = "color", not(target_os = "windows")))]
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::{env, fmt, fs, process};
+use std::{fmt, fs, process};
 
 #[cfg(feature = "color")]
 use colored::{ColoredString, Colorize};
@@ -165,7 +164,11 @@ fn print_binary_results(binaries: &[Binary], settings: &output::Settings) {
     }
 }
 
-fn print_process_results(processes: &Processes, settings: &output::Settings) {
+fn print_process_results(
+    processes: &Processes,
+    settings: &output::Settings,
+    maps: bool,
+) {
     match settings.format {
         output::Format::Json => {
             println!("{}", &json!(processes));
@@ -233,7 +236,7 @@ fn print_process_results(processes: &Processes, settings: &output::Settings) {
                     feature = "maps",
                     any(target_os = "linux", target_os = "windows")
                 ))]
-                if settings.maps {
+                if maps {
                     if let Some(maps) = &process.maps {
                         println!("{:>12}", "\u{21aa} Maps:");
                         for map in maps {
@@ -595,11 +598,7 @@ fn parse_single_file(
     parse_file_impl(file, true, &Some(lookup), &mut None)
 }
 
-fn walk(
-    basepath: &Path,
-    scan_dynlibs: bool,
-    output_settings: &output::Settings,
-) {
+fn walk(basepath: &Path, scan_dynlibs: bool) -> Vec<Binary> {
     let lookup = if scan_dynlibs {
         Some(Lookup {
             #[cfg(all(target_os = "linux", feature = "elf"))]
@@ -614,7 +613,7 @@ fn walk(
 
     let cache = Arc::new(Mutex::new(HashMap::new()));
 
-    let bins: Vec<Binary> = Walk::new(basepath)
+    Walk::new(basepath)
         .flatten()
         .filter(|entry| {
             entry.file_type().filter(std::fs::FileType::is_file).is_some()
@@ -630,9 +629,7 @@ fn walk(
             .ok()
         })
         .flatten()
-        .collect();
-
-    print_binary_results(&bins, output_settings);
+        .collect()
 }
 
 #[cfg(all(feature = "maps", target_os = "linux"))]
@@ -700,7 +697,11 @@ fn parse_process_libraries(
     ))
 }
 
-fn parse_processes<'a, I>(processes: I, scan_dynlibs: bool) -> Vec<Process>
+fn parse_processes<'a, I>(
+    processes: I,
+    quiet: bool,
+    scan_dynlibs: bool,
+) -> Vec<Process>
 where
     I: Iterator<Item = &'a sysinfo::Process> + Send,
 {
@@ -711,11 +712,13 @@ where
         .filter_map(|process| {
             match parse(process.exe(), &mut Some(Arc::clone(&cache))) {
                 Err(err) => {
-                    if let ParseError::IO(ref e) = err {
-                        if e.kind() == ErrorKind::NotFound
-                            || e.kind() == ErrorKind::PermissionDenied
-                        {
-                            return None;
+                    if quiet {
+                        if let ParseError::IO(ref e) = err {
+                            if e.kind() == ErrorKind::NotFound
+                                || e.kind() == ErrorKind::PermissionDenied
+                            {
+                                return None;
+                            }
                         }
                     }
 
@@ -753,228 +756,230 @@ where
         .collect()
 }
 
-#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
+#[derive(Debug, Parser)]
+#[command(
+    author,
+    version,
+    about,
+    override_usage = "checksec [OPTIONS] [COMMAND]\n       command | checksec [OPTIONS]"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+    /// Disables color output
+    #[arg(long = "no-color")]
+    color: bool,
+    /// Output format
+    #[arg(long, default_value_t = output::Format::Text)]
+    format: output::Format,
+    /// Scan shared libraries
+    #[arg(short, long)]
+    libraries: bool,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Scan executables by path
+    #[command(arg_required_else_help = true)]
+    Exe {
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
+    /// Scan processes by PID
+    #[command(arg_required_else_help = true)]
+    ProcID {
+        #[arg(required = true)]
+        pids: Vec<sysinfo::Pid>,
+        /// Include process memory maps (linux only)
+        #[arg(short, long)]
+        maps: bool,
+    },
+    /// Scan processes by name
+    #[command(arg_required_else_help = true)]
+    ProcName {
+        #[arg(required = true)]
+        procnames: Vec<String>,
+        /// Include process memory maps (linux only)
+        #[arg(short, long)]
+        maps: bool,
+    },
+    /// Scan all running processes
+    ProcAll {
+        /// Include process memory maps (linux only)
+        #[arg(short, long)]
+        maps: bool,
+    },
+}
+
 fn main() {
-    let args = Command::new("checksec")
-        .about(crate_description!())
-        .author(crate_authors!())
-        .version(crate_version!())
-        .arg_required_else_help(true)
-        .arg(
-            Arg::new("directory")
-                .short('d')
-                .long("directory")
-                .value_name("DIRECTORY")
-                .help("Target directory"),
-        )
-        .arg(
-            Arg::new("file")
-                .short('f')
-                .long("file")
-                .value_name("FILE")
-                .help("Target file"),
-        )
-        .arg(
-            Arg::new("json")
-                .short('j')
-                .long("json")
-                .action(ArgAction::SetTrue)
-                .help("Output in json format"),
-        )
-        .arg(
-            Arg::new("libraries")
-                .short('l')
-                .long("libraries")
-                .action(ArgAction::SetTrue)
-                .help("Include all shared loaded libraries (Linux only)")
-                .requires("directory")
-                .requires("file")
-                .requires("pid")
-                .requires("process")
-                .requires("process-all"),
-        )
-        .arg(
-            Arg::new("maps")
-                .short('m')
-                .long("maps")
-                .action(ArgAction::SetTrue)
-                .help("Include process memory maps (linux only)")
-                .requires("pid")
-                .requires("process")
-                .requires("process-all")
-                .conflicts_with_all(["directory", "file"]),
-        )
-        .arg(
-            Arg::new("no-color")
-                .long("no-color")
-                .action(ArgAction::SetTrue)
-                .help("Disables color output"),
-        )
-        .arg(
-            Arg::new("pid")
-                .help(
-                    "Process ID of running process to check\n\
-                    (comma separated for multiple PIDs)",
-                )
-                .long("pid")
-                .value_name("PID"),
-        )
-        .arg(
-            Arg::new("pretty")
-                .long("pretty")
-                .action(ArgAction::SetTrue)
-                .help("Human readable json output")
-                .requires("json"),
-        )
-        .arg(
-            Arg::new("process")
-                .short('p')
-                .long("process")
-                .value_name("NAME")
-                .help("Name of running process to check"),
-        )
-        .arg(
-            Arg::new("process-all")
-                .short('P')
-                .long("process-all")
-                .action(ArgAction::SetTrue)
-                .help("Check all running processes"),
-        )
-        .group(
-            ArgGroup::new("operation")
-                .args(["directory", "file", "pid", "process", "process-all"])
-                .required(true),
-        )
-        .get_matches();
+    let args = Cli::parse();
 
-    // required operation
-    let file = args.get_one::<String>("file");
-    let directory = args.get_one::<String>("directory");
-    let procids = args.get_one::<String>("pid");
-    let procname = args.get_one::<String>("process");
-    let procall = args.get_flag("process-all");
-
-    // optional modifiers
-    let libraries = args.get_flag("libraries");
-
-    let format = if args.get_flag("json") {
-        if args.get_flag("pretty") {
-            output::Format::JsonPretty
-        } else {
-            output::Format::Json
-        }
-    } else {
-        output::Format::Text
-    };
+    let format = args.format;
 
     let settings = output::Settings::set(
         #[cfg(feature = "color")]
-        !args.get_flag("no-color"),
+        !args.color,
         format,
-        args.get_flag("maps"),
-        libraries,
+        args.libraries,
     );
 
-    if procall {
-        let system = System::new_with_specifics(
-            RefreshKind::new()
-                .with_processes(ProcessRefreshKind::new().with_cpu()),
-        );
-
-        let procs = parse_processes(system.processes().values(), libraries);
-
-        print_process_results(&Processes::new(procs), &settings);
-    } else if let Some(procids) = procids {
-        let procids: Vec<sysinfo::Pid> = procids
-            .split(',')
-            .map(|id| match id.parse::<sysinfo::Pid>() {
-                Ok(id) => id,
-                Err(msg) => {
-                    eprintln!("Invalid process ID {id}: {msg}");
-                    process::exit(1);
-                }
-            })
-            .collect();
-        let system = System::new_with_specifics(
-            RefreshKind::new()
-                .with_processes(ProcessRefreshKind::new().with_cpu()),
-        );
-
-        let procs = parse_processes(
-            procids
-                .iter()
-                .filter_map(|&pid| {
-                    system.process(pid).or_else(|| {
-                        eprintln!("No process found with ID {pid}");
-                        None
-                    })
-                })
-                .filter(|process| {
-                    if process.exe().is_file() {
-                        true
-                    } else {
-                        eprintln!(
-                "No valid executable found for process {} with ID {}: {}",
-                process.name(),
-                process.pid(),
-                process.exe().display()
-            );
-                        false
-                    }
-                }),
-            libraries,
-        );
-
-        print_process_results(&Processes::new(procs), &settings);
-    } else if let Some(procname) = procname {
-        let system = System::new_with_specifics(
-            RefreshKind::new()
-                .with_processes(ProcessRefreshKind::new().with_cpu()),
-        );
-
-        let procs = parse_processes(
-            system
-                .processes_by_name(procname)
-                // TODO: processes_by_name() should return a Iterator implementing the trait Send
-                .collect::<Vec<&sysinfo::Process>>()
-                .into_iter(),
-            libraries,
-        );
-
-        if procs.is_empty() {
-            eprintln!("No process found matching name {procname}");
-            process::exit(1);
+    match args.command {
+        Some(Commands::Exe { paths }) => {
+            let results = scan_paths(&paths, args.libraries);
+            print_binary_results(&results, &settings);
         }
-        print_process_results(&Processes::new(procs), &settings);
-    } else if let Some(directory) = directory {
-        let directory_path = Path::new(directory);
-
-        if !directory_path.is_dir() {
-            eprintln!("Directory {} not found", underline!(directory));
-            process::exit(1);
-        }
-
-        walk(directory_path, libraries, &settings);
-    } else if let Some(file) = file {
-        let file_path = Path::new(file);
-
-        if !file_path.is_file() {
-            eprintln!("File {} not found", underline!(file));
-            process::exit(1);
-        }
-
-        match parse_single_file(file_path, libraries) {
-            Ok(result) => {
-                print_binary_results(&result, &settings);
-            }
-            Err(msg) => {
-                eprintln!(
-                    "Cannot parse binary file {}: {}",
-                    underline!(file),
-                    msg
-                );
+        Some(Commands::ProcID { pids, maps }) => {
+            let results = scan_pids(&pids, args.libraries);
+            if results.is_empty() {
                 process::exit(1);
             }
+            print_process_results(&Processes::new(results), &settings, maps);
         }
+        Some(Commands::ProcName { procnames, maps }) => {
+            let results = scan_procnames(&procnames, args.libraries);
+            if results.is_empty() {
+                process::exit(1);
+            }
+            print_process_results(&Processes::new(results), &settings, maps);
+        }
+        Some(Commands::ProcAll { maps }) => {
+            let results = scan_all_processes(args.libraries);
+            if results.is_empty() {
+                eprintln!("No running process found");
+                process::exit(1);
+            }
+            print_process_results(&Processes::new(results), &settings, maps);
+        }
+        None => {
+            #[allow(unused_must_use)]
+            if atty::is(atty::Stream::Stdin) {
+                let mut cmd = Cli::command();
+                cmd.print_help();
+                process::exit(1);
+            }
+
+            let results: Vec<Binary> = std::io::stdin()
+                .lock()
+                .lines()
+                .map(|line| {
+                    line.expect("Cannot read line from standard input")
+                })
+                .filter_map(|file| {
+                    let path = Path::new(&file);
+                    if path.is_file() {
+                        parse_single_file(path, args.libraries).ok()
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .collect();
+            print_binary_results(&results, &settings);
+        }
+    };
+}
+
+fn scan_paths(paths: &[PathBuf], libraries: bool) -> Vec<Binary> {
+    let mut results = Vec::new();
+
+    for path in paths {
+        let metadata = match fs::metadata(path) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!(
+                    "Failed to check path {}: {}",
+                    underline!(path.display().to_string()),
+                    e
+                );
+                continue;
+            }
+        };
+
+        if metadata.is_file() {
+            // TODO: reuse cache
+            match parse_single_file(path, libraries) {
+                Ok(mut res) => results.append(&mut res),
+                Err(msg) => {
+                    eprintln!(
+                        "Cannot parse binary file {}: {}",
+                        underline!(path.display().to_string()),
+                        msg
+                    );
+                }
+            }
+            continue;
+        }
+
+        if metadata.is_dir() {
+            // TODO: reuse cache
+            results.append(&mut walk(path, libraries));
+            continue;
+        }
+
+        eprintln!(
+            "{} is an unsupported type of file",
+            underline!(path.display().to_string())
+        );
     }
+
+    results
+}
+
+fn scan_pids(pids: &[sysinfo::Pid], libraries: bool) -> Vec<Process> {
+    let system = System::new_with_specifics(
+        RefreshKind::new()
+            .with_processes(ProcessRefreshKind::new().with_cpu()),
+    );
+
+    parse_processes(
+        pids.iter().filter_map(|pid| {
+            if let Some(process) = system.process(*pid) {
+                Some(process)
+            } else {
+                eprintln!("No process found with ID {pid}");
+                None
+            }
+        }),
+        false,
+        libraries,
+    )
+}
+
+fn scan_procnames(procnames: &[String], libraries: bool) -> Vec<Process> {
+    let system = System::new_with_specifics(
+        RefreshKind::new()
+            .with_processes(ProcessRefreshKind::new().with_cpu()),
+    );
+
+    parse_processes(
+        procnames
+            .iter()
+            .filter_map(|procname| {
+                // processes_by_name() returns an Iterator not implementing Send
+                let procs: Vec<_> =
+                    system.processes_by_name(procname).collect();
+                if procs.is_empty() {
+                    eprintln!("No process found with name {procname}");
+                    None
+                } else {
+                    Some(procs)
+                }
+            })
+            .flatten(),
+        false,
+        libraries,
+    )
+}
+
+fn scan_all_processes(libraries: bool) -> Vec<Process> {
+    let system = System::new_with_specifics(
+        RefreshKind::new()
+            .with_processes(ProcessRefreshKind::new().with_cpu()),
+    );
+
+    parse_processes(
+        system.processes().iter().map(|(_pid, process)| process),
+        true,
+        libraries,
+    )
 }
