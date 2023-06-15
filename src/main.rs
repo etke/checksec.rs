@@ -33,6 +33,8 @@ use std::collections::HashMap;
 #[cfg(all(target_os = "linux", feature = "elf"))]
 use std::collections::HashSet;
 use std::ffi::OsStr;
+#[cfg(feature = "archives")]
+use std::io::Cursor;
 use std::io::ErrorKind;
 #[cfg(all(feature = "color", not(target_os = "windows")))]
 use std::os::unix::fs::PermissionsExt;
@@ -46,6 +48,8 @@ use colored::{ColoredString, Colorize};
 
 #[cfg(feature = "color")]
 use colored_json::to_colored_json_auto;
+#[cfg(feature = "archives")]
+use compress_tools::{ArchiveContents, ArchiveIterator};
 
 mod binary;
 mod proc;
@@ -269,6 +273,8 @@ enum ParseError {
     IO(std::io::Error),
     #[cfg(all(target_os = "linux", feature = "elf"))]
     LdSo(LdSoError),
+    #[cfg(feature = "archives")]
+    Decompress(compress_tools::Error),
     #[allow(dead_code)]
     Unimplemented(&'static str),
 }
@@ -282,6 +288,8 @@ impl fmt::Display for ParseError {
             Self::LdSo(e) => {
                 write!(f, "Failed to initialize library lookup: {e}")
             }
+            #[cfg(feature = "archives")]
+            Self::Decompress(e) => e.fmt(f),
             Self::Unimplemented(str) => {
                 write!(f, "Support for files of type {str} not implemented")
             }
@@ -305,6 +313,13 @@ impl From<std::io::Error> for ParseError {
 impl From<LdSoError> for ParseError {
     fn from(err: LdSoError) -> ParseError {
         ParseError::LdSo(err)
+    }
+}
+
+#[cfg(feature = "archives")]
+impl From<compress_tools::Error> for ParseError {
+    fn from(err: compress_tools::Error) -> ParseError {
+        ParseError::Decompress(err)
     }
 }
 
@@ -424,6 +439,48 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
         #[cfg(not(feature = "macho"))]
         Object::Mach(_) => Err(ParseError::Unimplemented("MachO")),
         Object::Archive(archive) => Ok(parse_archive(&archive, file, bytes)),
+        #[cfg(feature = "archives")]
+        Object::Unknown(magic) => {
+            let mut results = Vec::new();
+            let mut handled = false;
+
+            let mut name = String::default();
+            let mut buffer = Vec::new();
+
+            for content in ArchiveIterator::from_read(Cursor::new(bytes))? {
+                match content {
+                    ArchiveContents::StartOfEntry(s, _) => {
+                        name = s;
+                        buffer.clear();
+                    }
+                    ArchiveContents::DataChunk(v) => buffer.extend(v),
+                    ArchiveContents::EndOfEntry => {
+                        if buffer != bytes {
+                            handled = true;
+
+                            if let Ok(mut res) = parse_bytes(
+                                &buffer,
+                                Path::new(&format!(
+                                    "{}\u{2794}{}",
+                                    file.display(),
+                                    name
+                                )),
+                            ) {
+                                results.append(&mut res);
+                            }
+                        }
+                    }
+                    ArchiveContents::Err(e) => Err(e)?,
+                }
+            }
+
+            if handled {
+                Ok(results)
+            } else {
+                Err(ParseError::Goblin(Error::BadMagic(magic)))
+            }
+        }
+        #[cfg(not(feature = "archives"))]
         Object::Unknown(magic) => {
             Err(ParseError::Goblin(Error::BadMagic(magic)))
         }
