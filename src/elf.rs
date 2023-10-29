@@ -7,6 +7,7 @@ use goblin::elf::dynamic::{
     DF_1_NOW, DF_1_PIE, DF_BIND_NOW, DT_RPATH, DT_RUNPATH,
 };
 use goblin::elf::header::ET_DYN;
+use goblin::elf::note::NT_GNU_PROPERTY_TYPE_0;
 use goblin::elf::program_header::{PF_X, PT_GNU_RELRO, PT_GNU_STACK};
 #[cfg(feature = "disassembly")]
 use goblin::elf::section_header::{SHF_ALLOC, SHF_EXECINSTR, SHT_PROGBITS};
@@ -25,6 +26,20 @@ use crate::disassembly::{has_stack_clash_protection, Bitness};
 #[cfg(target_os = "linux")]
 use crate::ldso::{LdSoError, LdSoLookup};
 use crate::shared::{Rpath, VecRpath};
+
+/* X86 processor-specific features */
+pub const GNU_PROPERTY_X86_FEATURE_1_AND:u32 = 0xc0000002;
+/* Executable sections are compatible with IBT.  */
+pub const GNU_PROPERTY_X86_FEATURE_1_IBT:u32 = (1 as u32) << 0;
+/* Executable sections are compatible with SHSTK.  */
+pub const GNU_PROPERTY_X86_FEATURE_1_SHSTK:u32 = (1 as u32) << 1;
+
+
+fn read_le_u32(input: &mut &[u8]) -> u32 {
+    let (int_bytes, rest) = input.split_at(std::mem::size_of::<u32>());
+    *input = rest;
+    u32::from_le_bytes(int_bytes.try_into().unwrap())
+}
 
 /// Relocation Read-Only mode: `None`, `Partial`, or `Full`
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -134,6 +149,44 @@ impl fmt::Display for Fortify {
     }
 }
 
+/// IntelCET Features: `None`, `SHSTK`, `IBT` or `IBTSHSTK` (IBT and SHSTK)
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum IntelCET {
+    None,
+    SHSTK,
+    IBT,
+    IBTSHSTK
+}
+
+impl fmt::Display for IntelCET {
+    #[cfg(not(feature = "color"))]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:<4}",
+            match *self {
+                Self::None => "None",
+                Self::SHSTK => "SHSTK",
+                Self::IBT => "IBT",
+                Self::IBTSHSTK => "IBT & SHSTK"
+            }
+        )
+    }
+    #[cfg(feature = "color")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:<4}",
+            match *self {
+                Self::None => "None".red(),
+                Self::SHSTK => "SHSTK".yellow(),
+                Self::IBT => "IBT".yellow(),
+                Self::IBTSHSTK => "IBT & SHSTK".green()
+            }
+        )
+    }
+}
+
 /// Checksec result struct for ELF32/64 binaries
 ///
 /// **Example**
@@ -178,6 +231,8 @@ pub struct CheckSecResults {
     pub rpath: VecRpath,
     /// Run-time search path (`DT_RUNTIME`)
     pub runpath: VecRpath,
+    /// Intel CET Features (*CFLAGS=*`-fcf-protection=[full|branch|return|none]`)
+    pub intelcet: IntelCET,
     /// Linked dynamic libraries
     pub dynlibs: Vec<String>,
 }
@@ -204,6 +259,7 @@ impl CheckSecResults {
             relro: elf.has_relro(),
             rpath: elf.has_rpath(),
             runpath: elf.has_runpath(),
+            intelcet: elf.has_intel_cet(bytes),
             dynlibs: elf
                 .libraries
                 .iter()
@@ -220,7 +276,7 @@ impl fmt::Display for CheckSecResults {
         write!(
             f,
             "Canary: {} CFI: {} SafeStack: {} StackClash: {} Fortify: {} Fortified: {:2} \
-            Fortifiable: {:2} NX: {} PIE: {} Relro: {} RPATH: {} RUNPATH: {}",
+            Fortifiable: {:2} NX: {} PIE: {} Relro: {} RPATH: {} RUNPATH: {} IntelCET: {}",
             self.canary,
             self.clang_cfi,
             self.clang_safestack,
@@ -232,7 +288,8 @@ impl fmt::Display for CheckSecResults {
             self.pie,
             self.relro,
             self.rpath,
-            self.runpath
+            self.runpath,
+            self.intelcet
         )
     }
     #[cfg(feature = "color")]
@@ -240,7 +297,7 @@ impl fmt::Display for CheckSecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} {} {} {} {} {} {} {} {} {} {} {:2} {} {:2} {} {} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {} {} {:2} {} {:2} {} {} {} {} {} {} {} {} {} {} {} {}",
             "Canary:".bold(),
             colorize_bool!(self.canary),
             "CFI:".bold(),
@@ -264,7 +321,9 @@ impl fmt::Display for CheckSecResults {
             "RPATH:".bold(),
             self.rpath,
             "RUNPATH:".bold(),
-            self.runpath
+            self.runpath,
+            "IntelCET:".bold(),
+            self.intelcet
         )
     }
 }
@@ -313,6 +372,9 @@ pub trait Properties {
     /// check the `.dynamic` section for `DT_RPATH` and return results in a
     /// `VecRpath`
     fn has_runpath(&self) -> VecRpath;
+    /// check the notes in `.note.gnu.property` for
+    /// GNU_PROPERTY_X86_FEATURE_1_IBT and GNU_PROPERTY_X86_FEATURE_1_SHSTK
+    fn has_intel_cet(&self, bytes: &[u8]) -> IntelCET;
     /// return the corresponding string from dynstrtab for a given `d_tag`
     fn get_dynstr_by_tag(&self, tag: u64) -> Option<&str>;
 }
@@ -582,6 +644,46 @@ impl Properties for Elf<'_> {
             }
         }
         VecRpath::new(vec![Rpath::None])
+    }
+    fn has_intel_cet(&self, bytes: &[u8]) -> IntelCET {
+        let Some(note_iterator) = self.iter_note_sections(bytes, Some(".note.gnu.property")) else {return IntelCET::None;};
+        for note_result in note_iterator {
+            match note_result {
+                Ok(note) => {
+                    if note.n_type == NT_GNU_PROPERTY_TYPE_0 {
+                        let mut desc_buffer = note.desc;
+                        let size = if self.is_64 {8} else {4};
+                        while desc_buffer.len()>=8 {
+                            let property_type: u32 = read_le_u32(&mut desc_buffer);
+                            let property_datasz: u32 = read_le_u32(&mut desc_buffer);
+                            if property_type == GNU_PROPERTY_X86_FEATURE_1_AND {
+                                let property_bitmask: u32 = read_le_u32(&mut desc_buffer);
+                                if (property_bitmask & GNU_PROPERTY_X86_FEATURE_1_IBT) != 0 && (property_bitmask & GNU_PROPERTY_X86_FEATURE_1_SHSTK)!= 0 {
+                                    return IntelCET::IBTSHSTK;
+                                }
+                                if (property_bitmask & GNU_PROPERTY_X86_FEATURE_1_IBT) != 0 {
+                                    return IntelCET::IBT;
+                                }
+                                if (property_bitmask & GNU_PROPERTY_X86_FEATURE_1_SHSTK)!= 0 {
+                                    return IntelCET::SHSTK;
+                                }
+                                // Align word size manually here
+                                if size == 8 {
+                                    read_le_u32(&mut desc_buffer);
+                                }
+                            } else {
+                                // Align word size
+                                // skip_bytes > datasz with skip_bytes = x*size
+                                let skip_bytes:u32 = (property_datasz + (size-1)) & !(size-1);
+                                (_, desc_buffer) = desc_buffer.split_at(skip_bytes as usize);
+                            }
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        return IntelCET::None
     }
     fn get_dynstr_by_tag(&self, tag: u64) -> Option<&str> {
         if let Some(dynamic) = &self.dynamic {
