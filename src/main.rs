@@ -33,6 +33,8 @@ use std::collections::HashMap;
 #[cfg(all(target_os = "linux", feature = "elf"))]
 use std::collections::HashSet;
 use std::ffi::OsStr;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::ErrorKind;
 #[cfg(all(feature = "color", not(target_os = "windows")))]
 use std::os::unix::fs::PermissionsExt;
@@ -775,6 +777,13 @@ fn main() {
                 .help("Target file"),
         )
         .arg(
+            Arg::new("listfile")
+                .short('L')
+                .long("listfile")
+                .value_name("LISTFILE")
+                .help("Textfile with one filepath in each line"),
+        )
+        .arg(
             Arg::new("json")
                 .short('j')
                 .long("json")
@@ -842,7 +851,7 @@ fn main() {
         )
         .group(
             ArgGroup::new("operation")
-                .args(["directory", "file", "pid", "process", "process-all"])
+                .args(["directory", "file", "listfile", "pid", "process", "process-all"])
                 .required(true),
         )
         .get_matches();
@@ -850,6 +859,7 @@ fn main() {
     // required operation
     let file = args.get_one::<String>("file");
     let directory = args.get_one::<String>("directory");
+    let listfile = args.get_one::<String>("listfile");
     let procids = args.get_one::<String>("pid");
     let procname = args.get_one::<String>("process");
     let procall = args.get_flag("process-all");
@@ -976,5 +986,33 @@ fn main() {
                 process::exit(1);
             }
         }
+    } else if let Some(listfile) = listfile  {
+        let file_path = Path::new(listfile);
+
+        if !file_path.is_file() {
+            eprintln!("Listfile {} not found", underline!(listfile));
+            process::exit(1);
+        }
+
+        let f = fs::File::open(file_path).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut line = String::new();
+        let mut bins: Vec<Binary> = Vec::new();
+
+        while let Ok(size) = reader.read_line(&mut line) {
+            if size == 0 {
+                break;
+            }
+            let binary_file_path = Path::new(line.trim());
+            if !binary_file_path.is_file() {
+                eprintln!("File {} not found", underline!(line.trim()));
+                process::exit(1);
+            }
+            if let Ok(mut result) = parse_single_file(binary_file_path, libraries) {
+                bins.append(&mut result);
+            }
+            line.clear();
+        }
+        print_binary_results(&bins, &settings);
     }
 }
