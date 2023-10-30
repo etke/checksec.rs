@@ -1,8 +1,9 @@
 //! Implements checksec for PE32/32+ binaries
 #[cfg(feature = "color")]
 use colored::Colorize;
+use goblin::pe::debug::DebugData;
 use goblin::pe::utils::find_offset;
-use goblin::pe::PE;
+use goblin::pe::{PE, debug};
 use goblin::pe::{
     data_directories::DataDirectory, options::ParseOptions,
     section_table::SectionTable,
@@ -27,6 +28,12 @@ const IMAGE_DLLCHARACTERISTICS_GUARD_CF: u16 = 0x4000;
 const IMAGE_GUARD_RF_INSTRUMENTED: u32 = 0x0002_0000;
 const IMAGE_GUARD_RF_ENABLE: u32 = 0x0004_0000;
 const IMAGE_GUARD_RF_STRICT: u32 = 0x0008_0000;
+
+const SIZE_OF_IMAGE_DEBUG_DIR_ENTRY: u32 = 28;
+const IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS: u32 = 20;
+// stored in `IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS`
+const IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT: u32 = 0x01;
+const IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT_STRICT_MODE :u32 = 0x02;
 
 /// `IMAGE_LOAD_CONFIG_CODE_INTEGRITY`
 #[repr(C)]
@@ -229,6 +236,35 @@ fn get_load_config_val(
     }
 }
 
+trait AdditionalFunctions<'a> {
+    fn get_image_debug_directory(&self,bytes: &'a[u8]) -> Option<Vec<DebugData<'a>>>;
+}
+impl<'a> AdditionalFunctions<'a> for PE<'a> {
+    /// Workaround function for https://github.com/m4b/goblin/issues/314
+    /// Goblin only provides the first entry from the ImageDebugDirectory
+    /// instead of all entries
+    /// 
+    /// Returns a vector containing all DebugData from the PE File
+    fn get_image_debug_directory(&self,bytes: &'a[u8]) -> Option<Vec<DebugData<'a>>> {
+        let mut image_debug_dir = Vec::new();
+
+        let Some(optional_header) = self.header.optional_header else {return None};
+
+        let file_alignment = optional_header.windows_fields.file_alignment;
+        let Some(mut dd) = optional_header.data_directories.get_debug_table() else {return None};
+        for _ in 0..dd.size/SIZE_OF_IMAGE_DEBUG_DIR_ENTRY {
+            // this parse should return a vector but doesnt.
+            // instead it only returns the first entry
+            let debug_data_entry_result = debug::DebugData::parse(bytes, dd, &self.sections, file_alignment);
+            let Ok(debug_data_entry) = debug_data_entry_result else {return None};
+            image_debug_dir.push(debug_data_entry);
+            // shift the address to receive the next entry when calling parse
+            dd.virtual_address += SIZE_OF_IMAGE_DEBUG_DIR_ENTRY;
+        }
+        return Some(image_debug_dir)
+    }
+}
+
 /// Address Space Layout Randomization: `None`, `DYNBASE`, or `HIGHENTROPYVA`
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum ASLR {
@@ -323,6 +359,8 @@ pub struct CheckSecResults {
     pub safeseh: bool,
     /// Structured Exception Handler
     pub seh: bool,
+    /// IntelCET Shadow Stack (`/CETCOMPAT`)
+    pub cetcompat: bool,
 }
 impl CheckSecResults {
     #[must_use]
@@ -341,6 +379,7 @@ impl CheckSecResults {
             rfg: pe.has_rfg(buffer),
             safeseh: pe.has_safe_seh(buffer),
             seh: pe.has_seh(),
+            cetcompat: pe.has_cetcompat(buffer),
         }
     }
 }
@@ -352,7 +391,7 @@ impl fmt::Display for CheckSecResults {
             f,
             "ASLR: {} Authenticode: {} CFG: {} CLR: {} DEP: {} \
             Dynamic Base: {} Force Integrity: {} GS: {} \
-            High Entropy VA: {} Isolation: {} RFG: {} SafeSEH: {} SEH: {}",
+            High Entropy VA: {} Isolation: {} RFG: {} SafeSEH: {} SEH: {} CETCOMPAT: {}",
             self.aslr,
             self.authenticode,
             self.cfg,
@@ -365,7 +404,8 @@ impl fmt::Display for CheckSecResults {
             self.isolation,
             self.rfg,
             self.safeseh,
-            self.seh
+            self.seh,
+            self.cetcompat
         )
     }
     #[cfg(feature = "color")]
@@ -374,7 +414,7 @@ impl fmt::Display for CheckSecResults {
         write!(
             f,
             "{} {} {} {} {} {} {} {} {} {} {} {} {} {} \
-             {} {} {} {} {} {} {} {} {} {} {} {}",
+             {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
             "ASLR:".bold(),
             self.aslr,
             "Authenticode:".bold(),
@@ -400,7 +440,9 @@ impl fmt::Display for CheckSecResults {
             "SafeSEH:".bold(),
             colorize_bool!(self.safeseh),
             "SEH:".bold(),
-            colorize_bool!(self.seh)
+            colorize_bool!(self.seh),
+            "CETCOMPAT:".bold(),
+            colorize_bool!(self.cetcompat)
         )
     }
 }
@@ -497,6 +539,9 @@ pub trait Properties {
     /// check `IMAGE_DLLCHARACTERISTICS_NO_SEH` from the
     /// `IMAGE_OPTIONAL_HEADER32/64`
     fn has_seh(&self) -> bool;
+    /// check `IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT` from the debug_data
+    /// `IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS`
+    fn has_cetcompat(&self, bytes: &[u8]) -> bool;
 }
 impl Properties for PE<'_> {
     fn has_aslr(&self) -> ASLR {
@@ -687,6 +732,21 @@ impl Properties for PE<'_> {
                 )
             }
             _ => false,
+        }
+    }
+    fn has_cetcompat(&self, bytes: &[u8]) -> bool {
+        match self.get_image_debug_directory(bytes) {
+            Some(dd_vec) => {
+                for dd in dd_vec {
+                    if dd.image_debug_directory.data_type == IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS {
+                        let i = dd.image_debug_directory.pointer_to_raw_data as usize;
+                        let properties = u32::from_le_bytes(bytes[i..i+4].try_into().unwrap());
+                        return (properties & IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT) != 0 || (properties & IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT_STRICT_MODE) != 0;
+                    }
+                }
+                return false
+            }
+            None => return false
         }
     }
 }
