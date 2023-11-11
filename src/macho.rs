@@ -176,9 +176,9 @@ pub trait Properties {
 }
 impl Properties for MachO<'_> {
     fn has_arc(&self) -> bool {
-        if let Ok(imports) = self.imports() {
-            for import in &imports {
-                if import.name == "_objc_release" {
+        for i in self.symbols() {
+            if let Ok((symbol,_)) = i {
+                if symbol == "_objc_release" {
                     return true;
                 }
             }
@@ -186,9 +186,9 @@ impl Properties for MachO<'_> {
         false
     }
     fn has_canary(&self) -> bool {
-        if let Ok(imports) = self.imports() {
-            for import in &imports {
-                match import.name {
+        for i in self.symbols() {
+            if let Ok((symbol,_)) = i {
+                match symbol {
                     "___stack_chk_fail" | "___stack_chk_guard" => return true,
                     _ => continue,
                 }
