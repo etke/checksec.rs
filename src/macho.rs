@@ -150,9 +150,9 @@ impl fmt::Display for CheckSecResults {
 /// }
 /// ```
 pub trait Properties {
-    /// check import names for `_objc_release`
+    /// check symbol names for `_objc_release` or `_swift_release`
     fn has_arc(&self) -> bool;
-    /// check import names for `___stack_chk_fail` or `___stack_chk_guard`
+    /// check symbol names for `___stack_chk_fail` `___stack_chk_guard` or `___chkstk_darwin`
     fn has_canary(&self) -> bool;
     /// check data size of code signature in load commands
     fn has_code_signature(&self) -> bool;
@@ -178,8 +178,9 @@ impl Properties for MachO<'_> {
     fn has_arc(&self) -> bool {
         for i in self.symbols() {
             if let Ok((symbol,_)) = i {
-                if symbol == "_objc_release" {
-                    return true;
+                match symbol {
+                    "_objc_release" | "_swift_release" => return true,
+                    _ => continue,
                 }
             }
         }
@@ -189,7 +190,7 @@ impl Properties for MachO<'_> {
         for i in self.symbols() {
             if let Ok((symbol,_)) = i {
                 match symbol {
-                    "___stack_chk_fail" | "___stack_chk_guard" => return true,
+                    "___stack_chk_fail" | "___stack_chk_guard" | "___chkstk_darwin" => return true,
                     _ => continue,
                 }
             }
