@@ -8,7 +8,7 @@ use std::fmt;
 
 #[cfg(feature = "color")]
 use crate::colorize_bool;
-//use crate::shared::{Rpath, VecRpath};
+use crate::shared::{Rpath, VecRpath};
 
 const MH_ALLOW_STACK_EXECUTION: u32 = 0x0002_0000;
 const MH_PIE: u32 = 0x0020_0000;
@@ -55,8 +55,7 @@ pub struct CheckSecResults {
     /// Restrict segment
     pub restrict: bool,
     /// Load Command @rpath
-    //rpath: VecRpath,
-    pub rpath: bool,
+    pub rpath: VecRpath,
 }
 impl CheckSecResults {
     #[must_use]
@@ -127,8 +126,7 @@ impl fmt::Display for CheckSecResults {
             "Restrict:".bold(),
             colorize_bool!(self.restrict),
             "RPath:".bold(),
-            //self.rpath
-            colorize_bool!(self.rpath)
+            self.rpath
         )
     }
 }
@@ -152,9 +150,9 @@ impl fmt::Display for CheckSecResults {
 /// }
 /// ```
 pub trait Properties {
-    /// check import names for `_objc_release`
+    /// check symbol names for `_objc_release` or `_swift_release`
     fn has_arc(&self) -> bool;
-    /// check import names for `___stack_chk_fail` or `___stack_chk_guard`
+    /// check symbol names for `___stack_chk_fail` `___stack_chk_guard` or `___chkstk_darwin`
     fn has_canary(&self) -> bool;
     /// check data size of code signature in load commands
     fn has_code_signature(&self) -> bool;
@@ -173,26 +171,26 @@ pub trait Properties {
     fn has_pie(&self) -> bool;
     /// check for `___restrict` segment name
     fn has_restrict(&self) -> bool;
-    //fn has_rpath(&self) -> VecRpath;
     /// check for `RPath` in load commands
-    fn has_rpath(&self) -> bool;
+    fn has_rpath(&self) -> VecRpath;
 }
 impl Properties for MachO<'_> {
     fn has_arc(&self) -> bool {
-        if let Ok(imports) = self.imports() {
-            for import in &imports {
-                if import.name == "_objc_release" {
-                    return true;
+        for i in self.symbols() {
+            if let Ok((symbol,_)) = i {
+                match symbol {
+                    "_objc_release" | "_swift_release" => return true,
+                    _ => continue,
                 }
             }
         }
         false
     }
     fn has_canary(&self) -> bool {
-        if let Ok(imports) = self.imports() {
-            for import in &imports {
-                match import.name {
-                    "___stack_chk_fail" | "___stack_chk_guard" => return true,
+        for i in self.symbols() {
+            if let Ok((symbol,_)) = i {
+                match symbol {
+                    "___stack_chk_fail" | "___stack_chk_guard" | "___chkstk_darwin" => return true,
                     _ => continue,
                 }
             }
@@ -264,18 +262,15 @@ impl Properties for MachO<'_> {
         }
         false
     }
-    //fn has_rpath(&self) -> VecRpath {
-    fn has_rpath(&self) -> bool {
-        // simply check for existence of @rpath command for now
-        // parse out rpath entries similar to elf later
-        // paths separated by `;` instead of `:` like the elf counterpart
-        for loadcmd in &self.load_commands {
-            if let CommandVariant::Rpath(_) = loadcmd.command {
-                return true;
-                //return VecRpath::new(vec![Rpath::Yes("true".to_string())]);
+    fn has_rpath(&self) -> VecRpath {
+        if self.rpaths.is_empty() {
+            return VecRpath::new(vec![Rpath::None]);
+        } else {
+            let mut rpath_vec = Vec::with_capacity(self.rpaths.len());
+            for i in &self.rpaths {
+                rpath_vec.push(Rpath::Yes(i.to_string()));
             }
+            return VecRpath::new(rpath_vec);
         }
-        //VecRpath::new(vec![Rpath::None])
-        false
     }
 }

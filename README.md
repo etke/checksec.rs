@@ -141,7 +141,6 @@ See [examples/](https://github.com/etke/checksec.rs/tree/master/examples) for li
     * Rpath RW
 * Platform independent checks
   * MachO
-    * `@rpath` contents into `shared::VecRpath` similar to `DT_RPATH`/`DT_RUNPATH` on ELFs
     * Code signature validation
 
 ### checksec todos
