@@ -427,6 +427,7 @@ fn parse_bytes(bytes: &[u8], file: &Path) -> Result<Vec<Binary>, ParseError> {
         Object::Unknown(magic) => {
             Err(ParseError::Goblin(Error::BadMagic(magic)))
         }
+        _ => Err(ParseError::Unimplemented("Unknown")),
     }
 }
 
